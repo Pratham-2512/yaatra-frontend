@@ -1,8 +1,5 @@
 import type { LngLat } from '@/lib/types';
 
-const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
-const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
-
 interface NominatimPlace {
   lat: string;
   lon: string;
@@ -37,18 +34,7 @@ export interface ResolvedRoute {
 }
 
 async function geocodePlace(query: string): Promise<{ normalized: string; coords: LngLat }> {
-  const params = new URLSearchParams({
-    q: query,
-    format: 'jsonv2',
-    limit: '1',
-    countrycodes: 'in',
-  });
-
-  const response = await fetch(`${NOMINATIM_URL}?${params}`, {
-    headers: {
-      Accept: 'application/json',
-    },
-  });
+  const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
 
   if (!response.ok) {
     throw new Error(`Geocoding failed for "${query}"`);
@@ -71,18 +57,8 @@ async function geocodePlace(query: string): Promise<{ normalized: string; coords
 }
 
 async function fetchOsrmRoute(pickup: LngLat, dropoff: LngLat): Promise<OsrmRoute> {
-  const params = new URLSearchParams({
-    overview: 'full',
-    geometries: 'geojson',
-  });
-  const response = await fetch(
-    `${OSRM_URL}/${pickup.lng},${pickup.lat};${dropoff.lng},${dropoff.lat}?${params}`,
-    {
-      headers: {
-        Accept: 'application/json',
-      },
-    }
-  );
+  const coords = `${pickup.lng},${pickup.lat};${dropoff.lng},${dropoff.lat}`;
+  const response = await fetch(`/api/osrm?coords=${encodeURIComponent(coords)}`);
 
   if (!response.ok) {
     throw new Error('Failed to fetch route');
