@@ -3,6 +3,7 @@ export interface FareEstimate {
   base?: number;
   distanceCharge?: number;
   surge?: number;
+  surgeFactor?: number;
 }
 
 export interface DriverInfo {

@@ -256,7 +256,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
 
   const bookRide = useCallback(async () => {
     const vt = riderState.vehicleType as VehicleType;
-    const fareStr = `â‚¹${riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].priceFrom}`;
+    const fareStr = `â‚¹${riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].baseFare}`;
     let rideId = `RIDE-${Date.now().toString(36).slice(-6).toUpperCase()}`;
 
     try {
@@ -290,7 +290,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       dropoff: riderState.dropoff,
       distance_km: Number(riderState.distance) || 0,
       duration_min: riderState.duration ?? 0,
-      fare: riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].priceFrom,
+      fare: riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].baseFare,
       vehicle_type: vt,
       status: 'searching',
     }).catch(() => {});
