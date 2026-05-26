@@ -39,7 +39,10 @@ export function useTripPolling({
 }: TripPollHandlers) {
   const active = Boolean(rideId) && !['idle', 'rating', 'payment'].includes(tripPhase);
   const handlersRef = useRef({ onTripUpdate, onDriverPosition, onProgress, onPhaseSync });
-  handlersRef.current = { onTripUpdate, onDriverPosition, onProgress, onPhaseSync };
+
+  useEffect(() => {
+    handlersRef.current = { onTripUpdate, onDriverPosition, onProgress, onPhaseSync };
+  }, [onDriverPosition, onPhaseSync, onProgress, onTripUpdate]);
 
   useEffect(() => {
     if (!active || !rideId) return;

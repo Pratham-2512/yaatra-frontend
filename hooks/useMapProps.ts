@@ -1,27 +1,40 @@
 'use client';
 
-import { useRide } from '@/context/RideContext';
+import { useMemo } from 'react';
+import { useRide } from '@/contexts/RideStateContext';
 import type { MapMode } from '@/lib/types';
 
-export function useMapProps(mode: MapMode, progress?: number) {
+export function useMapProps(mode: MapMode = 'rider', progress?: number) {
   const {
     route,
     pickupCoords,
     dropoffCoords,
     driverMapPosition,
-    riderState,
-    tripPhase,
+    driverState,
   } = useRide();
 
-  return {
-    mode: tripPhase === 'searching' ? 'searching' : mode,
-    routeCoords: route.length ? route : undefined,
-    pickupCoords,
+  return useMemo(() => {
+    return {
+      pickup: pickupCoords
+        ? { lat: pickupCoords.lat, lng: pickupCoords.lng }
+        : undefined,
+      dropoff: dropoffCoords
+        ? { lat: dropoffCoords.lat, lng: dropoffCoords.lng }
+        : undefined,
+      route,
+      mode,
+      progress,
+      driverPosition:
+        driverMapPosition ??
+        (mode === 'driver' ? driverState.currentLocation : undefined),
+    };
+  }, [
     dropoffCoords,
-    driverPosition: driverMapPosition,
-    tripProgress: progress ?? riderState.progress,
-    showRoute: route.length > 0 || mode !== 'searching',
-    showFleet: true,
-    showHotspots: true,
-  };
+    driverMapPosition,
+    driverState.currentLocation,
+    mode,
+    pickupCoords,
+    progress,
+    route,
+  ]);
 }

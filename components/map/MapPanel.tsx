@@ -1,22 +1,93 @@
 'use client';
 
+import { useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import type { FleetMapProps } from './FleetMap';
 
-const FleetMap = dynamic(() => import('./FleetMap').then((m) => m.FleetMap), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full min-h-[220px] items-center justify-center bg-[#0a1020] md:min-h-[280px]">
-      <div className="h-10 w-10 animate-spin-slow rounded-full border-2 border-cyan-500/20 border-t-cyan-400" />
-    </div>
-  ),
-});
+const FleetMap = dynamic(
+  () => import('./FleetMap'),
+  {
+    ssr: false,
+  }
+);
 
-export function MapPanel(props: FleetMapProps & { height?: string }) {
-  const { height = 'min-h-[240px] md:min-h-[300px]', className = '', ...rest } = props;
+interface MapPanelProps {
+  mode?: string;
+  showRoute?: boolean;
+  pickup?: {
+    lat: number;
+    lng: number;
+  };
+  dropoff?: {
+    lat: number;
+    lng: number;
+  };
+  route?: {
+    lat: number;
+    lng: number;
+  }[];
+  routeCoords?: {
+    lat: number;
+    lng: number;
+  }[];
+  pickupCoords?: {
+    lat: number;
+    lng: number;
+  } | null;
+  dropoffCoords?: {
+    lat: number;
+    lng: number;
+  } | null;
+  driverPosition?: {
+    lat: number;
+    lng: number;
+  } | null;
+  showFleet?: boolean;
+  showHeatmap?: boolean;
+  showHotspots?: boolean;
+  showDebug?: boolean;
+  className?: string;
+  height?: string;
+  progress?: number;
+}
+
+export default function MapPanel({
+  showRoute,
+  pickup,
+  dropoff,
+  route = [],
+  routeCoords,
+  pickupCoords,
+  dropoffCoords,
+  driverPosition,
+  showFleet = false,
+  showHeatmap = false,
+  showHotspots = false,
+  showDebug = false,
+  className = '',
+  height = 'h-full',
+}: MapPanelProps) {
+  const resolvedRoute = routeCoords ?? route;
+  const shouldShowRoute = showRoute ?? resolvedRoute.length > 1;
+
+  const fleetMapRoute = useMemo<[number, number][]>(
+    () => (shouldShowRoute ? resolvedRoute.map((p) => [p.lng, p.lat]) : []),
+    [shouldShowRoute, resolvedRoute]
+  );
+
   return (
-    <div className={`relative flex-1 ${height} ${className}`}>
-      <FleetMap className="absolute inset-0 h-full w-full" {...rest} />
+    <div
+      className={`relative flex-1 ${height} ${className}`}
+    >
+      <FleetMap
+        pickup={pickupCoords ?? pickup}
+        dropoff={dropoffCoords ?? dropoff}
+        route={fleetMapRoute}
+        driverPosition={driverPosition}
+        showFleet={showFleet}
+        showHeatmap={showHeatmap}
+        showHotspots={showHotspots}
+        showDebug={showDebug}
+      />
     </div>
   );
 }

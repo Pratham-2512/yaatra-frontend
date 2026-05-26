@@ -1,7 +1,5 @@
 'use client';
 
-import { useRide } from '@/context/RideContext';
-import { MapPanel } from '@/components/map/MapPanel';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { KpiWidget } from '@/components/ui/KpiWidget';
 import { DEMO_OPS } from '@/lib/constants';
@@ -15,7 +13,6 @@ export function CommandCenter({
   adminState: AdminState;
   tripPhase: TripPhase;
 }) {
-  const { route, pickupCoords, dropoffCoords, driverMapPosition } = useRide();
   const m = adminState.metrics;
   const ops = adminState.liveOps;
   const activeTrips = Math.max(m.activeRides, DEMO_OPS.activeTrips, tripPhase !== 'idle' ? 1 : 0);
@@ -25,29 +22,7 @@ export function CommandCenter({
     adminState.activeTripList.length > 0 ? adminState.activeTripList : DEMO_ACTIVE_TRIPS;
 
   return (
-    <div className="flex h-full min-h-0 flex-col lg:flex-row">
-      <div className="relative min-h-[240px] flex-1 lg:min-h-0">
-        <MapPanel
-          mode="command"
-          showRoute={route.length > 0}
-          routeCoords={route.length ? route : undefined}
-          pickupCoords={pickupCoords}
-          dropoffCoords={dropoffCoords}
-          driverPosition={driverMapPosition}
-          showFleet
-          showHeatmap
-          showHotspots
-          className="absolute inset-0 h-full"
-        />
-        <div className="pointer-events-none absolute left-3 top-3 hidden lg:block">
-          <GlassCard className="px-3 py-2 text-[10px]">
-            <p className="font-bold text-cyan-400">Mobility war room</p>
-            <p className="text-slate-500">Heatmap · Congestion · Live GPS</p>
-          </GlassCard>
-        </div>
-      </div>
-
-      <div className="scrollbar-thin flex w-full flex-col gap-2.5 overflow-y-auto border-t border-white/[0.06] bg-[#080d18]/95 p-3 lg:w-[400px] lg:border-l lg:border-t-0 lg:p-4 xl:w-[440px]">
+    <div className="scrollbar-thin flex w-full shrink-0 flex-col gap-2.5 overflow-y-auto border-t border-white/[0.06] bg-[#080d18]/95 p-3 lg:w-[400px] lg:border-l lg:border-t-0 lg:p-4 xl:w-[440px]">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-orange-400/90">
@@ -171,6 +146,5 @@ export function CommandCenter({
           </GlassCard>
         )}
       </div>
-    </div>
   );
 }

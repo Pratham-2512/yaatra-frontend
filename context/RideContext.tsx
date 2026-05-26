@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import {
   createContext,
@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { MapsService } from '@/lib/api';
 import { tripApi, metricsToAdminState } from '@/services/tripApi';
 import { useTripPolling, tripDtoToDriver } from '@/hooks/useTripPolling';
 import {
@@ -18,17 +17,14 @@ import {
   initialRiderState,
 } from '@/lib/constants';
 import type {
-  AdminMetrics,
   AdminState,
   DriverInfo,
   DriverState,
   GpsSyncStatus,
   IncomingRide,
   LngLat,
-  MLPrediction,
   NavRole,
   RiderState,
-  RouteAnomaly,
   TripPhase,
 } from '@/lib/types';
 import { calculateFare, VEHICLE_PRICING, type VehicleType } from '@/services/pricing';
@@ -107,7 +103,6 @@ const RideContext = createContext<RideContextValue | null>(null);
 const DRIVER_ID = 'DRV-001';
 
 export function RideProvider({ children }: { children: React.ReactNode }) {
-  const mapsRef = useRef(new MapsService());
   const autoAssignRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { push: toast } = useToast();
   const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -126,7 +121,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
   const [driverMapPosition, setDriverMapPosition] = useState<LngLat | null>(null);
   const [gpsStatus, setGpsStatus] = useState<GpsSyncStatus>('synced');
   const [isEstimating, setIsEstimating] = useState(false);
-  const [routeSource, setRouteSource] = useState('simulated');
+  const [routeSource, setRouteSource] = useState('none');
 
   const syncRiderScreen = useCallback((phase: TripPhase) => {
     setRiderState((p) => ({ ...p, screen: phaseToRiderScreen(phase) }));
@@ -182,18 +177,17 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await resolveRoute(
         riderState.pickup,
-        riderState.dropoff,
-        mapsRef.current
+        riderState.dropoff
       );
 
       setRoute(result.route);
       setPickupCoords(result.pickup.coords);
       setDropoffCoords(result.dropoff.coords);
       setRouteSource(result.source);
-      setGpsStatus(result.usedFallback ? 'fallback' : 'synced');
+      setGpsStatus('synced');
 
       const vt = riderState.vehicleType as VehicleType;
-      const fare = calculateFare(vt, result.distanceKm, result.durationMin);
+      const fare = calculateFare(vt, result.distanceKm);
 
       try {
         const apiFare = await tripApi.estimateFare(
@@ -224,18 +218,12 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       }));
       setTripPhase('confirm');
 
-      toast(
-        result.usedFallback ? 'info' : 'success',
-        result.usedFallback ? 'Smart NCR fallback route' : 'Route ready',
-        result.usedFallback
-          ? 'Using smart NCR fallback route — sector mapping active for Gurgaon.'
-          : `${result.distanceKm.toFixed(1)} km · ~${result.durationMin} min`
-      );
+      toast('success', 'Route ready', `${result.distanceKm.toFixed(1)} km · ~${result.durationMin} min`);
     } catch (e) {
       console.error(e);
       setTripPhase('idle');
       setGpsStatus('offline');
-      toast('error', 'Estimate failed', 'Tap retry — NCR fallback will still work.');
+      toast('error', 'Estimate failed', 'Check the locations and try again.');
     } finally {
       setIsEstimating(false);
     }
@@ -243,7 +231,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
 
   const startDriverMovement = useCallback(
     (fromProgress: number, toProgress: number, onDone?: () => void) => {
-      if (!route.length) return;
+      if (route.length < 2) return;
       let p = fromProgress;
       driverMoveRef.current = setInterval(() => {
         p += 1.2;
@@ -267,7 +255,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
 
   const bookRide = useCallback(async () => {
     const vt = riderState.vehicleType as VehicleType;
-    const fareStr = `₹${riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].priceFrom}`;
+    const fareStr = `â‚¹${riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].priceFrom}`;
     let rideId = `RIDE-${Date.now().toString(36).slice(-6).toUpperCase()}`;
 
     try {
@@ -302,7 +290,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       }));
       toast('info', 'Ride requested', 'Fleet partners notified in your zone.');
     } else {
-      toast('info', 'Finding driver', 'Matching nearest partner across NCR…');
+      toast('info', 'Finding driver', 'Matching nearest partner across NCRâ€¦');
       setTimeout(() => {
         setDriverState((prev) => ({
           ...prev,
@@ -352,7 +340,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
             driver,
           }));
           setTripPhase('arriving');
-          toast('success', 'Driver assigned', `${driver.name} · fleet auto-match`);
+          toast('success', 'Driver assigned', `${driver.name} Â· fleet auto-match`);
           if (route.length) {
             setDriverMapPosition(interpolateRoute(route, 0));
             startDriverMovement(0, 18);
@@ -401,7 +389,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
         rideId,
       }));
       setTripPhase('arriving');
-      toast('success', 'Driver assigned', `${driver.name} is en route · ${driver.eta} min`);
+      toast('success', 'Driver assigned', `${driver.name} is en route Â· ${driver.eta} min`);
 
       if (route.length) {
         setDriverMapPosition(interpolateRoute(route, 0));
@@ -429,6 +417,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
     }
     setTripPhase('inTrip');
     syncRiderScreen('inTrip');
+    setDriverMapPosition(route.length > 1 ? interpolateRoute(route, 0) : pickupCoords);
     setRiderState((prev) => ({ ...prev, screen: 'inTrip', progress: 0 }));
     setDriverState((prev) => ({ ...prev, screen: 'inTrip', progress: 0 }));
     toast('success', 'Trip started', 'Live GPS tracking active.');
@@ -452,13 +441,14 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         progress: Math.min(100, prev.progress + 4 + Math.random() * 8),
       }));
-      setRiderState((prev) => {
-        const pos = interpolateRoute(route, prev.progress);
-        setDriverMapPosition(pos);
-        return prev;
-      });
+      if (route.length > 1) {
+        setRiderState((prev) => {
+          setDriverMapPosition(interpolateRoute(route, prev.progress));
+          return prev;
+        });
+      }
     }, 1200);
-  }, [route, riderState.rideId, clearAnimations, syncRiderScreen, toast]);
+  }, [route, pickupCoords, riderState.rideId, clearAnimations, syncRiderScreen, toast]);
 
   useTripPolling({
     rideId: riderState.rideId,
@@ -507,6 +497,9 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
     clearAnimations();
     setTripPhase('idle');
     setRoute([]);
+    setPickupCoords(null);
+    setDropoffCoords(null);
+    setRouteSource('none');
     setDriverMapPosition(null);
     setRiderState({
       ...initialRiderState,
@@ -519,14 +512,29 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       earnings: prev.earnings + (riderState.fare?.totalFare ?? 285),
       tripsToday: prev.tripsToday + 1,
     }));
-    toast('success', 'Thanks for riding', 'Trip closed · fleet quality updated.');
+    toast('success', 'Thanks for riding', 'Trip closed Â· fleet quality updated.');
   }, [riderState, clearAnimations, toast]);
 
   const cancelSearch = useCallback(() => {
     clearAnimations();
     setTripPhase('idle');
+    setRoute([]);
+    setPickupCoords(null);
+    setDropoffCoords(null);
+    setRouteSource('none');
+    setDriverMapPosition(null);
     setDriverState((prev) => ({ ...prev, incomingRides: [] }));
-    setRiderState((prev) => ({ ...prev, screen: 'home', rideId: null, driver: null }));
+    setRiderState((prev) => ({
+      ...prev,
+      screen: 'home',
+      rideId: null,
+      driver: null,
+      fare: null,
+      distance: null,
+      duration: null,
+      pickupLocation: null,
+      dropoffLocation: null,
+    }));
     toast('info', 'Request cancelled', 'You can book again anytime.');
   }, [clearAnimations, toast]);
 
@@ -549,7 +557,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
         pickup: riderState.pickup,
         dropoff: riderState.dropoff,
         distance: Number(riderState.distance) || 5,
-        fare: `₹${riderState.fare?.totalFare ?? 280}`,
+        fare: `â‚¹${riderState.fare?.totalFare ?? 280}`,
         passenger: 'Rider',
         rating: 4.9,
         vehicleType: riderState.vehicleType,
@@ -563,7 +571,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
 
   const completeDriverTrip = useCallback(() => {
     clearAnimations();
-    const fare = driverState.acceptedRide?.fare ?? '₹285';
+    const fare = driverState.acceptedRide?.fare ?? 'â‚¹285';
     const amount = parseInt(fare.replace(/\D/g, ''), 10) || 285;
     setDriverState((prev) => ({
       ...prev,
@@ -637,8 +645,6 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       rejectRide,
       driverStartTrip,
       completeDriverTrip,
-      adminState.liveOps,
-      adminState.activeTripList,
     ]
   );
 

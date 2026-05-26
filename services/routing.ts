@@ -1,76 +1,120 @@
-import { MapsService } from '@/lib/api';
 import type { LngLat } from '@/lib/types';
-import { distanceKm, estimateDurationMin } from '@/utils/distance';
-import { approximateRoutePath, normalizeNcrLocation } from '@/utils/ncr-geocoding';
 
-export type RouteSource = 'google' | 'simulated' | 'cached';
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
+const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
 
-export interface RouteResult {
-  pickup: ReturnType<typeof normalizeNcrLocation>;
-  dropoff: ReturnType<typeof normalizeNcrLocation>;
+interface NominatimPlace {
+  lat: string;
+  lon: string;
+  display_name: string;
+}
+
+interface OsrmRoute {
+  distance: number;
+  duration: number;
+  geometry: {
+    coordinates: [number, number][];
+  };
+}
+
+interface OsrmResponse {
+  routes?: OsrmRoute[];
+}
+
+export interface ResolvedRoute {
+  pickup: {
+    normalized: string;
+    coords: LngLat;
+  };
+  dropoff: {
+    normalized: string;
+    coords: LngLat;
+  };
   distanceKm: number;
   durationMin: number;
   route: LngLat[];
-  source: RouteSource;
-  usedFallback: boolean;
+  source: 'osrm';
 }
 
-const MAX_RETRIES = 2;
+async function geocodePlace(query: string): Promise<{ normalized: string; coords: LngLat }> {
+  const params = new URLSearchParams({
+    q: query,
+    format: 'jsonv2',
+    limit: '1',
+    countrycodes: 'in',
+  });
 
-async function tryGoogleDirections(
-  maps: MapsService,
-  pickup: ReturnType<typeof normalizeNcrLocation>,
-  dropoff: ReturnType<typeof normalizeNcrLocation>
-): Promise<{ distance: number; duration: number } | null> {
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const api = await maps.getDirections(pickup.normalized, dropoff.normalized);
-      if (api && api.distance > 0) return { distance: api.distance, duration: Math.ceil(api.duration) };
-    } catch {
-      if (attempt < MAX_RETRIES) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-    }
+  const response = await fetch(`${NOMINATIM_URL}?${params}`, {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Geocoding failed for "${query}"`);
   }
-  return null;
+
+  const data = (await response.json()) as NominatimPlace[];
+  const place = data[0];
+
+  if (!place) {
+    throw new Error(`Location not found: ${query}`);
+  }
+
+  return {
+    normalized: place.display_name || query,
+    coords: {
+      lat: Number(place.lat),
+      lng: Number(place.lon),
+    },
+  };
+}
+
+async function fetchOsrmRoute(pickup: LngLat, dropoff: LngLat): Promise<OsrmRoute> {
+  const params = new URLSearchParams({
+    overview: 'full',
+    geometries: 'geojson',
+  });
+  const response = await fetch(
+    `${OSRM_URL}/${pickup.lng},${pickup.lat};${dropoff.lng},${dropoff.lat}?${params}`,
+    {
+      headers: {
+        Accept: 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch route');
+  }
+
+  const data = (await response.json()) as OsrmResponse;
+  const route = data.routes?.[0];
+
+  if (!route?.geometry?.coordinates?.length) {
+    throw new Error('No route found');
+  }
+
+  return route;
 }
 
 export async function resolveRoute(
-  pickupInput: string,
-  dropoffInput: string,
-  maps?: MapsService
-): Promise<RouteResult> {
-  const pickup = normalizeNcrLocation(pickupInput);
-  const dropoff = normalizeNcrLocation(dropoffInput);
+  pickupText: string,
+  dropoffText: string
+): Promise<ResolvedRoute> {
+  const [pickup, dropoff] = await Promise.all([
+    geocodePlace(pickupText),
+    geocodePlace(dropoffText),
+  ]);
 
-  let distance = distanceKm(pickup.coords, dropoff.coords);
-  let duration = estimateDurationMin(distance);
-  let source: RouteSource = 'simulated';
-  let usedFallback = !pickup.matched || !dropoff.matched;
-
-  if (maps) {
-    const google = await tryGoogleDirections(maps, pickup, dropoff);
-    if (google) {
-      distance = google.distance;
-      duration = google.duration;
-      source = 'google';
-      usedFallback = false;
-    }
-  }
-
-  if (distance < 0.5) {
-    distance = 2.5;
-    usedFallback = true;
-  }
-
-  const pointCount = Math.max(10, Math.min(32, Math.round(distance * 3)));
-  const route = approximateRoutePath(pickup.coords, dropoff.coords, pointCount);
+  const route = await fetchOsrmRoute(pickup.coords, dropoff.coords);
 
   return {
     pickup,
     dropoff,
-    distanceKm: distance,
-    durationMin: duration,
-    route,
-    source: usedFallback ? 'simulated' : source,
-    usedFallback,
+    distanceKm: route.distance / 1000,
+    durationMin: Math.max(1, Math.round(route.duration / 60)),
+    route: route.geometry.coordinates.map(([lng, lat]) => ({ lng, lat })),
+    source: 'osrm',
   };
 }

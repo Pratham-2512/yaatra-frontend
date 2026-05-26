@@ -4,6 +4,7 @@ import { CommandCenter } from '@/components/command/CommandCenter';
 import { ToastHost } from '@/components/common/ToastHost';
 import { DriverHome, DriverInTrip, DriverPickup } from '@/components/driver/DriverFlow';
 import { AppShell } from '@/components/layout/AppShell';
+import MapPanel from '@/components/map/MapPanel';
 import {
   RiderConfirm,
   RiderDriverArriving,
@@ -13,9 +14,11 @@ import {
   RiderRating,
   RiderSearching,
 } from '@/components/rider/RiderFlow';
+import { useMapProps } from '@/hooks/useMapProps';
 import { RideProvider, useRide } from '@/contexts/RideStateContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { SCREEN_TITLES } from '@/lib/constants';
+import type { MapMode } from '@/lib/types';
 
 function YaatraShell() {
   const {
@@ -42,6 +45,10 @@ function YaatraShell() {
       : userType === 'driver'
         ? 'Fleet partner'
         : 'Rider';
+
+  const mapMode: MapMode = userType === 'driver' ? 'driver' : 'rider';
+  const mapProps = useMapProps(mapMode);
+  const isAdmin = userType === 'admin';
 
   const renderContent = () => {
     if (userType === 'rider') {
@@ -80,7 +87,17 @@ function YaatraShell() {
         title={SCREEN_TITLES[currentScreen] ?? SCREEN_TITLES.command}
         subtitle={subtitle}
       >
-        <div className="h-full min-h-0 animate-fade-in">{renderContent()}</div>
+        <div className="flex h-full min-h-0 animate-fade-in flex-col lg:flex-row">
+          <MapPanel
+            {...mapProps}
+            showFleet={isAdmin}
+            showHeatmap={isAdmin}
+            showHotspots={isAdmin}
+            showDebug={isAdmin}
+            className="lg:min-h-0 lg:flex-[1.2]"
+          />
+          {renderContent()}
+        </div>
       </AppShell>
       <ToastHost />
     </>

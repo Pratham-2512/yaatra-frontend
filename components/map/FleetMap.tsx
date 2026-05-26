@@ -1,474 +1,467 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+import { useEffect, useMemo, useRef } from 'react';
+import maplibregl, { Marker, type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import {
-  DEFAULT_ROUTE,
-  FLEET_SEED,
-  NCR_CENTER,
-  NCR_CORRIDORS,
-  fleetToGeoJSON,
-  heatmapToGeoJSON,
-  hotspotsToGeoJSON,
-  interpolateRoute,
-  routeToGeoJSON,
-} from '@/lib/geo';
-import type { LngLat, MapMode } from '@/lib/types';
+import { DEMAND_ZONES, FLEET_SEED } from '@/lib/geo';
 
-export interface FleetMapProps {
-  mode?: MapMode;
-  className?: string;
-  showRoute?: boolean;
+interface MapPoint {
+  lat: number;
+  lng: number;
+}
+
+interface FleetMapProps {
+  pickup?: MapPoint | null;
+  dropoff?: MapPoint | null;
+  driverPosition?: MapPoint | null;
+  route?: [number, number][];
   showFleet?: boolean;
   showHeatmap?: boolean;
   showHotspots?: boolean;
-  tripProgress?: number;
-  interactive?: boolean;
-  routeCoords?: LngLat[];
-  pickupCoords?: LngLat | null;
-  dropoffCoords?: LngLat | null;
-  driverPosition?: LngLat | null;
+  showDebug?: boolean;
 }
 
-const DARK_MAP_STYLE: maplibregl.StyleSpecification = {
-  version: 8,
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-  sources: {
-    osm: {
-      type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: 'osm',
-      type: 'raster',
-      source: 'osm',
-      minzoom: 0,
-      maxzoom: 22,
-    },
-  ],
-};
+const ROUTE_SOURCE_ID = 'yaatra-route';
+const ROUTE_LAYER_ID = 'yaatra-route-line';
+const HEAT_SOURCE_ID = 'yaatra-heat';
+const HEAT_LAYER_ID = 'yaatra-heat-layer';
+const HOTSPOT_SOURCE_ID = 'yaatra-hotspots';
+const HOTSPOT_LAYER_ID = 'yaatra-hotspots-layer';
 
-export function FleetMap({
-  mode = 'rider',
-  className = '',
-  showRoute = true,
-  showFleet = true,
-  showHeatmap = false,
-  showHotspots = true,
-  tripProgress = 0,
-  interactive = true,
-  routeCoords,
-  pickupCoords,
-  dropoffCoords,
+// Runtime-safe validators — typed as `unknown` so they guard against
+// malformed API payloads, NaN, Infinity, partial tuples, or string coercions
+// that TypeScript types alone cannot prevent at runtime.
+function isValidCoord(coord: unknown): coord is [number, number] {
+  return (
+    Array.isArray(coord) &&
+    coord.length === 2 &&
+    typeof coord[0] === 'number' &&
+    typeof coord[1] === 'number' &&
+    Number.isFinite(coord[0]) &&
+    Number.isFinite(coord[1])
+  );
+}
+
+function isValidPoint(p: unknown): p is MapPoint {
+  if (typeof p !== 'object' || p === null) return false;
+  const obj = p as Record<string, unknown>;
+  return (
+    typeof obj.lng === 'number' &&
+    typeof obj.lat === 'number' &&
+    Number.isFinite(obj.lng) &&
+    Number.isFinite(obj.lat)
+  );
+}
+
+function pointToLngLat(point: MapPoint): [number, number] {
+  return [point.lng, point.lat];
+}
+
+function makeMarker(color: string) {
+  return new Marker({ color });
+}
+
+function fmt(n: number): string {
+  return n.toFixed(5);
+}
+
+export default function FleetMap({
+  pickup,
+  dropoff,
   driverPosition,
+  route = [],
+  showFleet = false,
+  showHeatmap = false,
+  showHotspots = false,
+  showDebug = false,
 }: FleetMapProps) {
-  const activeRoute = routeCoords?.length ? routeCoords : DEFAULT_ROUTE;
-  const activePickup = pickupCoords ?? activeRoute[0];
-  const activeDropoff = dropoffCoords ?? activeRoute[activeRoute.length - 1];
-  const containerRef = useRef<HTMLDivElement>(null);
+  const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const fleetRef = useRef(FLEET_SEED.map((v) => ({ ...v })));
-  const animRef = useRef<number>(0);
-  const [loaded, setLoaded] = useState(false);
+  const isLoadedRef = useRef(false);
+  const pickupMarkerRef = useRef<Marker | null>(null);
+  const dropoffMarkerRef = useRef<Marker | null>(null);
+  const driverMarkerRef = useRef<Marker | null>(null);
+  const fleetMarkersRef = useRef<Marker[]>([]);
+  const debugElRef = useRef<HTMLDivElement | null>(null);
 
+  // Each sync ref holds the latest-closure sync function for its domain.
+  // The single map.once('load', ...) in the init effect calls these,
+  // eliminating duplicate once registrations and stale closures: no matter
+  // how many renders happen before the map loads, the ref always points to
+  // the closure that captured the most-recent prop values.
+  const syncMarkersRef = useRef<(() => void) | null>(null);
+  const syncRouteRef = useRef<(() => void) | null>(null);
+  const syncFleetRef = useRef<(() => void) | null>(null);
+  const syncHeatmapRef = useRef<(() => void) | null>(null);
+  const syncHotspotsRef = useRef<(() => void) | null>(null);
+  const syncBoundsRef = useRef<(() => void) | null>(null);
+
+  // Read at init-effect time without making showDebug a dep of that effect,
+  // which would cause a full map teardown on every debug toggle.
+  const showDebugRef = useRef(showDebug);
+
+  const routeKey = useMemo(
+    () =>
+      route
+        .filter((c): c is [number, number] => isValidCoord(c))
+        .map(([lng, lat]) => `${lng.toFixed(6)},${lat.toFixed(6)}`)
+        .join('|'),
+    [route]
+  );
+
+  // Toggle debug overlay visibility without remounting the map.
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    showDebugRef.current = showDebug;
+    if (debugElRef.current) {
+      debugElRef.current.style.display = showDebug ? 'block' : 'none';
+    }
+  }, [showDebug]);
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapContainer.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: DARK_MAP_STYLE,
-      center: [NCR_CENTER.lng, NCR_CENTER.lat],
-      zoom: mode === 'command' ? 10.8 : 12.4,
-      pitch: mode === 'command' ? 28 : 42,
-      bearing: -12,
-      attributionControl: false,
-      interactive,
+      container: mapContainer.current,
+      style: {
+        version: 8,
+        sources: {
+          osm: {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256,
+            attribution: 'OpenStreetMap contributors',
+          },
+        },
+        layers: [{ id: 'osm-layer', type: 'raster', source: 'osm' }],
+      },
+      center: [77.1025, 28.4595],
+      zoom: 11,
+      attributionControl: { compact: true },
     });
 
-    map.addControl(
-      new maplibregl.AttributionControl({ compact: true }),
-      'bottom-right'
-    );
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 
-    map.on('load', () => {
-      map.setPaintProperty('osm', 'raster-opacity', 0.85);
+    // Debug overlay — imperative DOM mutations so map events never trigger
+    // React re-renders; the div is always created but hidden when showDebug=false.
+    const debugEl = document.createElement('div');
+    debugEl.style.cssText = [
+      'position:absolute',
+      'bottom:10px',
+      'left:10px',
+      'z-index:100',
+      'font:10px/1.7 "SF Mono",ui-monospace,monospace',
+      'color:#22d3ee',
+      'background:rgba(8,13,24,0.88)',
+      'border:1px solid rgba(34,211,238,0.18)',
+      'border-radius:6px',
+      'padding:5px 9px',
+      'pointer-events:none',
+      'white-space:pre',
+      'letter-spacing:0.03em',
+    ].join(';');
+    debugEl.style.display = showDebugRef.current ? 'block' : 'none';
+    mapContainer.current.appendChild(debugEl);
+    debugElRef.current = debugEl;
 
-      if (showRoute) {
-        map.addSource('route', { type: 'geojson', data: routeToGeoJSON(activeRoute) });
-        map.addLayer({
-          id: 'route-glow',
-          type: 'line',
-          source: 'route',
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: {
-            'line-color': '#22d3ee',
-            'line-width': 10,
-            'line-opacity': 0.2,
-            'line-blur': 4,
-          },
-        });
-        map.addLayer({
-          id: 'route-line',
-          type: 'line',
-          source: 'route',
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: {
-            'line-color': '#ff6b35',
-            'line-width': 4,
-            'line-opacity': 0.9,
-            'line-dasharray': [2, 1.5],
-          },
-        });
-        map.addSource('route-progress', {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            properties: {},
-            geometry: {
-              type: 'LineString',
-              coordinates: DEFAULT_ROUTE.map((p) => [p.lng, p.lat]),
-            },
-          },
-        });
-        map.addLayer({
-          id: 'route-done',
-          type: 'line',
-          source: 'route-progress',
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': '#34d399', 'line-width': 5, 'line-opacity': 0.95 },
-        });
+    const writeDebug = (cursorLat?: number, cursorLng?: number) => {
+      const c = map.getCenter();
+      const z = map.getZoom().toFixed(1);
+      const lines: string[] = [];
+      if (cursorLat !== undefined && cursorLng !== undefined) {
+        lines.push(`cur  ${fmt(cursorLat)} / ${fmt(cursorLng)}`);
       }
+      lines.push(`ctr  ${fmt(c.lat)} / ${fmt(c.lng)}`);
+      lines.push(`zoom ${z}`);
+      debugEl.textContent = lines.join('\n');
+    };
 
-      map.addSource('pickup', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: { label: 'Pickup' },
-          geometry: { type: 'Point', coordinates: [activePickup.lng, activePickup.lat] },
-        },
-      });
-      map.addSource('dropoff', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: { label: 'Drop' },
-          geometry: { type: 'Point', coordinates: [activeDropoff.lng, activeDropoff.lat] },
-        },
-      });
-      map.addSource('assigned-driver', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      });
-      map.addLayer({
-        id: 'assigned-driver-glow',
-        type: 'circle',
-        source: 'assigned-driver',
-        paint: {
-          'circle-radius': 18,
-          'circle-color': '#fbbf24',
-          'circle-opacity': 0.25,
-          'circle-blur': 0.5,
-        },
-      });
-      map.addLayer({
-        id: 'assigned-driver',
-        type: 'circle',
-        source: 'assigned-driver',
-        paint: {
-          'circle-radius': 7,
-          'circle-color': '#fbbf24',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#fff',
-        },
-      });
+    map.on('move', () => writeDebug());
+    map.on('mousemove', (e) => writeDebug(e.lngLat.lat, e.lngLat.lng));
+    map.on('mouseout', () => writeDebug());
 
-      map.addLayer({
-        id: 'pickup-pulse',
-        type: 'circle',
-        source: 'pickup',
-        paint: {
-          'circle-radius': 22,
-          'circle-color': '#ff6b35',
-          'circle-opacity': 0.12,
-          'circle-blur': 0.4,
-        },
-      });
-      map.addLayer({
-        id: 'pickup',
-        type: 'circle',
-        source: 'pickup',
-        paint: {
-          'circle-radius': 7,
-          'circle-color': '#ff6b35',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#fff',
-        },
-      });
-      map.addLayer({
-        id: 'dropoff',
-        type: 'circle',
-        source: 'dropoff',
-        paint: {
-          'circle-radius': 7,
-          'circle-color': '#22d3ee',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#fff',
-        },
-      });
-
-      if (showHotspots) {
-        map.addSource('hotspots', { type: 'geojson', data: hotspotsToGeoJSON() });
-        map.addLayer({
-          id: 'hotspot-glow',
-          type: 'circle',
-          source: 'hotspots',
-          paint: {
-            'circle-radius': [
-              'interpolate',
-              ['linear'],
-              ['get', 'intensity'],
-              0.5,
-              18,
-              1,
-              36,
-            ],
-            'circle-color': '#ff6b35',
-            'circle-opacity': 0.08,
-            'circle-blur': 1,
-          },
-        });
-        map.addLayer({
-          id: 'hotspot-core',
-          type: 'circle',
-          source: 'hotspots',
-          paint: {
-            'circle-radius': 6,
-            'circle-color': '#f59e0b',
-            'circle-opacity': 0.7,
-          },
-        });
-      }
-
-      if (showFleet) {
-        map.addSource('fleet', {
-          type: 'geojson',
-          data: fleetToGeoJSON(fleetRef.current),
-        });
-        map.addLayer({
-          id: 'fleet-glow',
-          type: 'circle',
-          source: 'fleet',
-          paint: {
-            'circle-radius': 14,
-            'circle-color': '#22d3ee',
-            'circle-opacity': 0.15,
-            'circle-blur': 0.6,
-          },
-        });
-        map.addLayer({
-          id: 'fleet',
-          type: 'circle',
-          source: 'fleet',
-          paint: {
-            'circle-radius': 5,
-            'circle-color': '#22d3ee',
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#0f172a',
-          },
-        });
-      }
-
-      if (showHeatmap) {
-        map.addSource('heatmap', { type: 'geojson', data: heatmapToGeoJSON() });
-        map.addLayer({
-          id: 'heatmap',
-          type: 'heatmap',
-          source: 'heatmap',
-          paint: {
-            'heatmap-weight': ['get', 'weight'],
-            'heatmap-intensity': 1.2,
-            'heatmap-radius': 28,
-            'heatmap-opacity': 0.65,
-            'heatmap-color': [
-              'interpolate',
-              ['linear'],
-              ['heatmap-density'],
-              0,
-              'rgba(15,23,42,0)',
-              0.3,
-              'rgba(255,107,53,0.4)',
-              0.6,
-              'rgba(245,158,11,0.6)',
-              1,
-              'rgba(34,211,238,0.85)',
-            ],
-          },
-        });
-      }
-
-      const labels = {
-        type: 'FeatureCollection' as const,
-        features: NCR_CORRIDORS.map((c) => ({
-          type: 'Feature' as const,
-          properties: { name: c.name },
-          geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
-        })),
-      };
-      map.addSource('corridors', { type: 'geojson', data: labels });
-      map.addLayer({
-        id: 'corridor-labels',
-        type: 'symbol',
-        source: 'corridors',
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 11,
-          'text-offset': [0, 1.2],
-          'text-anchor': 'top',
-          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-        },
-        paint: {
-          'text-color': '#94a3b8',
-          'text-halo-color': '#070b14',
-          'text-halo-width': 1.5,
-        },
-      });
-
-      setLoaded(true);
+    // Single load handler — reads sync fns from refs at fire time so it always
+    // applies the latest prop values regardless of how many renders preceded it.
+    map.once('load', () => {
+      isLoadedRef.current = true;
+      writeDebug();
+      syncMarkersRef.current?.();
+      syncRouteRef.current?.();
+      syncFleetRef.current?.();
+      syncHeatmapRef.current?.();
+      syncHotspotsRef.current?.();
+      syncBoundsRef.current?.();
     });
 
     mapRef.current = map;
 
-    let tick = 0;
-    const animate = () => {
-      tick += 1;
-      if (mapRef.current?.getSource('fleet') && showFleet) {
-        fleetRef.current = fleetRef.current.map((v) => ({
-          ...v,
-          lng: v.lng + Math.sin(tick * 0.02 + v.heading) * 0.0004,
-          lat: v.lat + Math.cos(tick * 0.018 + v.heading) * 0.0003,
-        }));
-        (mapRef.current.getSource('fleet') as maplibregl.GeoJSONSource).setData(
-          fleetToGeoJSON(fleetRef.current)
-        );
-      }
-      if (mapRef.current?.getLayer('route-line')) {
-        const phase = (tick % 120) / 120;
-        mapRef.current.setPaintProperty('route-line', 'line-opacity', 0.55 + Math.sin(phase * Math.PI * 2) * 0.35);
-      }
-      animRef.current = requestAnimationFrame(animate);
-    };
-    animRef.current = requestAnimationFrame(animate);
-
     return () => {
-      cancelAnimationFrame(animRef.current);
+      debugElRef.current?.remove();
+      debugElRef.current = null;
+      pickupMarkerRef.current?.remove();
+      dropoffMarkerRef.current?.remove();
+      driverMarkerRef.current?.remove();
+      fleetMarkersRef.current.forEach((m) => m.remove());
+      fleetMarkersRef.current = [];
+      pickupMarkerRef.current = null;
+      dropoffMarkerRef.current = null;
+      driverMarkerRef.current = null;
+      isLoadedRef.current = false;
       map.remove();
       mapRef.current = null;
     };
   }, []);
 
+  // ── Markers ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !loaded) return;
+    syncMarkersRef.current = () => {
+      const map = mapRef.current;
+      if (!map) return;
 
-    if (showRoute && map.getSource('route')) {
-      (map.getSource('route') as maplibregl.GeoJSONSource).setData(routeToGeoJSON(activeRoute));
-    }
-    if (map.getSource('pickup') && activePickup) {
-      (map.getSource('pickup') as maplibregl.GeoJSONSource).setData({
-        type: 'Feature',
-        properties: { label: 'Pickup' },
-        geometry: { type: 'Point', coordinates: [activePickup.lng, activePickup.lat] },
-      });
-    }
-    if (map.getSource('dropoff') && activeDropoff) {
-      (map.getSource('dropoff') as maplibregl.GeoJSONSource).setData({
-        type: 'Feature',
-        properties: { label: 'Drop' },
-        geometry: { type: 'Point', coordinates: [activeDropoff.lng, activeDropoff.lat] },
-      });
-    }
+      if (isValidPoint(pickup)) {
+        if (!pickupMarkerRef.current) {
+          pickupMarkerRef.current = makeMarker('#ff7a00').addTo(map);
+        }
+        pickupMarkerRef.current.setLngLat(pointToLngLat(pickup));
+      } else {
+        pickupMarkerRef.current?.remove();
+        pickupMarkerRef.current = null;
+      }
 
-    if (activeRoute.length >= 2) {
-      const bounds = new maplibregl.LngLatBounds();
-      activeRoute.forEach((p) => bounds.extend([p.lng, p.lat]));
-      map.fitBounds(bounds, { padding: 48, maxZoom: 14, duration: 600 });
-    }
-  }, [activeRoute, activePickup, activeDropoff, loaded, showRoute]);
+      if (isValidPoint(dropoff)) {
+        if (!dropoffMarkerRef.current) {
+          dropoffMarkerRef.current = makeMarker('#00d4ff').addTo(map);
+        }
+        dropoffMarkerRef.current.setLngLat(pointToLngLat(dropoff));
+      } else {
+        dropoffMarkerRef.current?.remove();
+        dropoffMarkerRef.current = null;
+      }
 
+      if (isValidPoint(driverPosition)) {
+        if (!driverMarkerRef.current) {
+          driverMarkerRef.current = makeMarker('#22c55e').addTo(map);
+        }
+        driverMarkerRef.current.setLngLat(pointToLngLat(driverPosition));
+      } else {
+        driverMarkerRef.current?.remove();
+        driverMarkerRef.current = null;
+      }
+    };
+
+    if (isLoadedRef.current) syncMarkersRef.current();
+  }, [pickup, dropoff, driverPosition]);
+
+  // ── Route ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !loaded || !showRoute) return;
+    syncRouteRef.current = () => {
+      const map = mapRef.current;
+      if (!map) return;
 
-    const doneCoords = activeRoute
-      .slice(0, Math.max(2, Math.ceil((tripProgress / 100) * activeRoute.length)))
-      .map((p) => [p.lng, p.lat] as [number, number]);
-    const src = map.getSource('route-progress') as maplibregl.GeoJSONSource | undefined;
-    if (src) {
-      src.setData({
+      const validRoute = route.filter((c): c is [number, number] => isValidCoord(c));
+
+      if (!validRoute.length) {
+        if (map.getLayer(ROUTE_LAYER_ID)) map.removeLayer(ROUTE_LAYER_ID);
+        if (map.getSource(ROUTE_SOURCE_ID)) map.removeSource(ROUTE_SOURCE_ID);
+        return;
+      }
+
+      const data: GeoJSON.Feature<GeoJSON.LineString> = {
         type: 'Feature',
         properties: {},
-        geometry: { type: 'LineString', coordinates: doneCoords },
-      });
-    }
+        geometry: { type: 'LineString', coordinates: validRoute },
+      };
 
-    const pos =
-      driverPosition ?? (tripProgress > 0 ? interpolateRoute(activeRoute, tripProgress) : null);
-    if (pos && map.getSource('assigned-driver')) {
-      (map.getSource('assigned-driver') as maplibregl.GeoJSONSource).setData({
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'Point', coordinates: [pos.lng, pos.lat] },
-      });
-    }
-  }, [tripProgress, loaded, showRoute, activeRoute, driverPosition]);
+      const source = map.getSource(ROUTE_SOURCE_ID) as GeoJSONSource | undefined;
+      if (source) {
+        source.setData(data);
+        return;
+      }
 
+      map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data });
+      map.addLayer({
+        id: ROUTE_LAYER_ID,
+        type: 'line',
+        source: ROUTE_SOURCE_ID,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#ff7a00',
+          'line-width': 5,
+          'line-opacity': 0.92,
+        },
+      });
+    };
+
+    if (isLoadedRef.current) syncRouteRef.current();
+  }, [route, routeKey]);
+
+  // ── Fleet markers ─────────────────────────────────────────────────────────
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !loaded) return;
-    if (mode === 'command') {
-      map.easeTo({ zoom: 10.8, pitch: 28, bearing: -8, duration: 800 });
-    } else if (mode === 'trip') {
-      map.easeTo({ zoom: 13.2, pitch: 48, duration: 600 });
-    } else {
-      map.easeTo({ zoom: 12.4, pitch: 42, duration: 600 });
-    }
-  }, [mode, loaded]);
+    syncFleetRef.current = () => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      fleetMarkersRef.current.forEach((m) => m.remove());
+      fleetMarkersRef.current = [];
+
+      if (!showFleet) return;
+
+      fleetMarkersRef.current = FLEET_SEED.map((vehicle) =>
+        makeMarker(
+          vehicle.type === 'bike' ? '#22c55e' : vehicle.type === 'auto' ? '#f59e0b' : '#38bdf8'
+        )
+          .setLngLat([vehicle.lng, vehicle.lat])
+          .addTo(map)
+      );
+    };
+
+    if (isLoadedRef.current) syncFleetRef.current();
+  }, [showFleet]);
+
+  // ── Heatmap ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    syncHeatmapRef.current = () => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      if (!showHeatmap) {
+        if (map.getLayer(HEAT_LAYER_ID)) map.removeLayer(HEAT_LAYER_ID);
+        if (map.getSource(HEAT_SOURCE_ID)) map.removeSource(HEAT_SOURCE_ID);
+        return;
+      }
+
+      if (!map.getSource(HEAT_SOURCE_ID)) {
+        map.addSource(HEAT_SOURCE_ID, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: DEMAND_ZONES.map((zone) => ({
+              type: 'Feature',
+              properties: { weight: zone.intensity },
+              geometry: {
+                type: 'Point',
+                coordinates: [zone.lng, zone.lat],
+              },
+            })),
+          },
+        });
+      }
+
+      if (!map.getLayer(HEAT_LAYER_ID)) {
+        map.addLayer({
+          id: HEAT_LAYER_ID,
+          type: 'heatmap',
+          source: HEAT_SOURCE_ID,
+          paint: {
+            'heatmap-weight': ['get', 'weight'],
+            'heatmap-intensity': 1.2,
+            'heatmap-radius': 34,
+            'heatmap-opacity': 0.45,
+            'heatmap-color': [
+              'interpolate',
+              ['linear'],
+              ['heatmap-density'],
+              0,
+              'rgba(8,13,24,0)',
+              0.35,
+              'rgba(34,211,238,0.45)',
+              0.7,
+              'rgba(249,115,22,0.65)',
+              1,
+              'rgba(248,113,113,0.8)',
+            ],
+          },
+        });
+      }
+    };
+
+    if (isLoadedRef.current) syncHeatmapRef.current();
+  }, [showHeatmap]);
+
+  // ── Hotspots ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    syncHotspotsRef.current = () => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      if (!showHotspots) {
+        if (map.getLayer(HOTSPOT_LAYER_ID)) map.removeLayer(HOTSPOT_LAYER_ID);
+        if (map.getSource(HOTSPOT_SOURCE_ID)) map.removeSource(HOTSPOT_SOURCE_ID);
+        return;
+      }
+
+      if (!map.getSource(HOTSPOT_SOURCE_ID)) {
+        map.addSource(HOTSPOT_SOURCE_ID, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: DEMAND_ZONES.map((zone) => ({
+              type: 'Feature',
+              properties: { name: zone.name },
+              geometry: {
+                type: 'Point',
+                coordinates: [zone.lng, zone.lat],
+              },
+            })),
+          },
+        });
+      }
+
+      if (!map.getLayer(HOTSPOT_LAYER_ID)) {
+        map.addLayer({
+          id: HOTSPOT_LAYER_ID,
+          type: 'circle',
+          source: HOTSPOT_SOURCE_ID,
+          paint: {
+            'circle-color': '#22d3ee',
+            'circle-radius': 6,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-opacity': 0.6,
+            'circle-stroke-width': 1,
+            'circle-opacity': 0.85,
+          },
+        });
+      }
+    };
+
+    if (isLoadedRef.current) syncHotspotsRef.current();
+  }, [showHotspots]);
+
+  // ── Fit bounds ────────────────────────────────────────────────────────────
+  // driverPosition is intentionally excluded: it updates every ~1.2 s during
+  // an active trip, and the driver always moves within the already-visible
+  // route corridor. Including it would cause continuous camera animation.
+  useEffect(() => {
+    syncBoundsRef.current = () => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      const points: [number, number][] = [];
+      if (isValidPoint(pickup)) points.push(pointToLngLat(pickup));
+      if (isValidPoint(dropoff)) points.push(pointToLngLat(dropoff));
+      const validRoutePoints = route.filter((c): c is [number, number] => isValidCoord(c));
+      if (validRoutePoints.length > 1) points.push(...validRoutePoints);
+
+      if (!points.length) return;
+
+      const bounds = points.reduce(
+        (b, p) => b.extend(p),
+        new maplibregl.LngLatBounds(points[0], points[0])
+      );
+      map.fitBounds(bounds, {
+        padding: 72,
+        maxZoom: points.length === 1 ? 14 : 15,
+        duration: 700,
+      });
+    };
+
+    if (isLoadedRef.current) syncBoundsRef.current();
+  }, [pickup, dropoff, route, routeKey]);
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
-      <div
-        ref={containerRef}
-        className="map-dark-tiles h-full min-h-[inherit] w-full"
-        style={{ minHeight: 'inherit' }}
-      />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#070b14]/60 via-transparent to-[#070b14]/90" />
-      <div className="gps-scan pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
-      {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#070b14]/80 backdrop-blur-sm">
-          <div className="h-10 w-10 animate-spin-slow rounded-full border-2 border-cyan-500/30 border-t-cyan-400" />
-        </div>
-      )}
-      <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex flex-wrap items-end justify-between gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          <span className="rounded-lg border border-orange-500/25 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-orange-200/90 backdrop-blur-md">
-            NCR corridor
-          </span>
-          <span className="rounded-lg border border-cyan-500/25 bg-black/50 px-2.5 py-1 text-[10px] font-medium text-cyan-300/90 backdrop-blur-md">
-            OSM · Live fleet
-          </span>
-        </div>
-        {mode === 'searching' && (
-          <span className="animate-pulse rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-medium text-amber-300">
-            Scanning demand…
-          </span>
-        )}
-      </div>
-    </div>
+    <div
+      ref={mapContainer}
+      className="map-dark-tiles relative h-full w-full overflow-hidden rounded-2xl"
+    />
   );
 }
