@@ -30,6 +30,7 @@ import type {
 import { calculateFare, VEHICLE_PRICING, type VehicleType } from '@/services/pricing';
 import { resolveRoute } from '@/services/routing';
 import { interpolateRoute } from '@/lib/geo';
+import { insertRide } from '@/lib/supabaseRides';
 import { useToast } from './ToastContext';
 
 const DEFAULT_DRIVER: DriverInfo = {
@@ -282,6 +283,17 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       rideId,
     }));
     setTripPhase('searching');
+
+    insertRide({
+      ride_id: rideId,
+      pickup: riderState.pickup,
+      dropoff: riderState.dropoff,
+      distance_km: Number(riderState.distance) || 0,
+      duration_min: riderState.duration ?? 0,
+      fare: riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].priceFrom,
+      vehicle_type: vt,
+      status: 'searching',
+    }).catch(() => {});
 
     if (driverState.online) {
       setDriverState((prev) => ({
