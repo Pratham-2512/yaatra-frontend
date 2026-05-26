@@ -220,9 +220,10 @@ export default function FleetMap({
 
       if (isValidPoint(pickup)) {
         if (!pickupMarkerRef.current) {
-          pickupMarkerRef.current = makeMarker('#ff7a00').addTo(map);
+          pickupMarkerRef.current = makeMarker('#ff7a00').setLngLat(pointToLngLat(pickup)).addTo(map);
+        } else {
+          pickupMarkerRef.current.setLngLat(pointToLngLat(pickup));
         }
-        pickupMarkerRef.current.setLngLat(pointToLngLat(pickup));
       } else {
         pickupMarkerRef.current?.remove();
         pickupMarkerRef.current = null;
@@ -230,9 +231,10 @@ export default function FleetMap({
 
       if (isValidPoint(dropoff)) {
         if (!dropoffMarkerRef.current) {
-          dropoffMarkerRef.current = makeMarker('#00d4ff').addTo(map);
+          dropoffMarkerRef.current = makeMarker('#00d4ff').setLngLat(pointToLngLat(dropoff)).addTo(map);
+        } else {
+          dropoffMarkerRef.current.setLngLat(pointToLngLat(dropoff));
         }
-        dropoffMarkerRef.current.setLngLat(pointToLngLat(dropoff));
       } else {
         dropoffMarkerRef.current?.remove();
         dropoffMarkerRef.current = null;
@@ -240,9 +242,10 @@ export default function FleetMap({
 
       if (isValidPoint(driverPosition)) {
         if (!driverMarkerRef.current) {
-          driverMarkerRef.current = makeMarker('#22c55e').addTo(map);
+          driverMarkerRef.current = makeMarker('#22c55e').setLngLat(pointToLngLat(driverPosition)).addTo(map);
+        } else {
+          driverMarkerRef.current.setLngLat(pointToLngLat(driverPosition));
         }
-        driverMarkerRef.current.setLngLat(pointToLngLat(driverPosition));
       } else {
         driverMarkerRef.current?.remove();
         driverMarkerRef.current = null;
