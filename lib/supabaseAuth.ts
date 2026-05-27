@@ -28,7 +28,7 @@ export interface DriverApplicationInput {
 }
 
 function toEmail(mobile: string): string {
-  return `${mobile.replace(/\D/g, '')}@yaatra.demo`;
+  return `${mobile.replace(/\D/g, '')}@yaatra.app`;
 }
 
 export async function signUpUser(
@@ -45,6 +45,14 @@ export async function signUpUser(
 
   if (error) return { userId: null, error: error.message };
   if (!data.user) return { userId: null, error: 'Signup failed — try again.' };
+
+  // Email confirmation is still enabled in Supabase → no session after signup
+  if (!data.session) {
+    return {
+      userId: null,
+      error: 'Email confirmation is enabled. Go to Supabase → Auth → Providers → Email → disable "Confirm email", then retry.',
+    };
+  }
 
   const { error: profileError } = await supabase.from('profiles').insert({
     id: data.user.id,
