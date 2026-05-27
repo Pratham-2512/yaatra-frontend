@@ -55,7 +55,7 @@ export const initialAdminState: AdminState = {
   metrics: {
     activeRides: 0,
     totalRevenue: 0,
-    avgRating: 4.7,
+    avgRating: 0,
     onlineDrivers: 0,
   },
   fraudAlerts: [],
@@ -63,18 +63,9 @@ export const initialAdminState: AdminState = {
   predictions: [],
   routes: [],
   liveOps: {
-    delayedTrips: 7,
-    fleetUtilization: 78,
-    cityVelocity: 24,
+    delayedTrips: 0,
+    fleetUtilization: 0,
+    cityVelocity: 0,
   },
   activeTripList: [],
-};
-
-/** Demo operational metrics when API is offline */
-export const DEMO_OPS = {
-  activeTrips: 142,
-  delayedRides: 7,
-  fleetUtilization: 78,
-  avgWaitMin: 4.2,
-  cityVelocity: 24,
 };

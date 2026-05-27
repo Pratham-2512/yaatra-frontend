@@ -17,6 +17,8 @@ import {
 import { useMapProps } from '@/hooks/useMapProps';
 import { RideProvider, useRide } from '@/contexts/RideStateContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { AuthProvider } from '@/context/AuthContext';
+import { AuthGate } from '@/components/auth/AuthGate';
 import { SCREEN_TITLES } from '@/lib/constants';
 import type { MapMode } from '@/lib/types';
 
@@ -106,10 +108,14 @@ function YaatraShell() {
 
 export default function YaatraApp() {
   return (
-    <ToastProvider>
-      <RideProvider>
-        <YaatraShell />
-      </RideProvider>
-    </ToastProvider>
+    <AuthProvider>
+      <AuthGate>
+        <ToastProvider>
+          <RideProvider>
+            <YaatraShell />
+          </RideProvider>
+        </ToastProvider>
+      </AuthGate>
+    </AuthProvider>
   );
 }

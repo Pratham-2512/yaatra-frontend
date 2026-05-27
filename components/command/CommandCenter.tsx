@@ -2,8 +2,6 @@
 
 import { GlassCard } from '@/components/ui/GlassCard';
 import { KpiWidget } from '@/components/ui/KpiWidget';
-import { DEMO_OPS } from '@/lib/constants';
-import { DEMO_ACTIVE_TRIPS } from '@/mock/fleet';
 import type { AdminState, TripPhase } from '@/lib/types';
 
 export function CommandCenter({
@@ -15,11 +13,10 @@ export function CommandCenter({
 }) {
   const m = adminState.metrics;
   const ops = adminState.liveOps;
-  const activeTrips = Math.max(m.activeRides, DEMO_OPS.activeTrips, tripPhase !== 'idle' ? 1 : 0);
-  const utilization = ops.fleetUtilization || DEMO_OPS.fleetUtilization;
-  const delayed = ops.delayedTrips || DEMO_OPS.delayedRides;
-  const liveTrips =
-    adminState.activeTripList.length > 0 ? adminState.activeTripList : DEMO_ACTIVE_TRIPS;
+  const activeTrips = m.activeRides + (tripPhase !== 'idle' ? 1 : 0);
+  const utilization = ops.fleetUtilization;
+  const delayed = ops.delayedTrips;
+  const liveTrips = adminState.activeTripList;
 
   return (
     <div className="scrollbar-thin flex w-full shrink-0 flex-col gap-2.5 overflow-y-auto border-t border-white/[0.06] bg-[#080d18]/95 p-3 lg:w-[400px] lg:border-l lg:border-t-0 lg:p-4 xl:w-[440px]">
@@ -36,14 +33,14 @@ export function CommandCenter({
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <KpiWidget label="Active trips" value={activeTrips} accent="orange" trend="↑" />
+          <KpiWidget label="Active trips" value={activeTrips} accent="orange" />
           <KpiWidget
             label="Revenue"
-            value={`₹${(m.totalRevenue / 1000 || 128).toFixed(0)}k`}
+            value={m.totalRevenue > 0 ? `₹${(m.totalRevenue / 1000).toFixed(1)}k` : '₹0'}
             accent="cyan"
           />
-          <KpiWidget label="Fleet util." value={`${utilization}%`} accent="emerald" />
-          <KpiWidget label="Online drivers" value={m.onlineDrivers || 312} accent="cyan" />
+          <KpiWidget label="Fleet util." value={utilization > 0 ? `${utilization}%` : '—'} accent="emerald" />
+          <KpiWidget label="Online drivers" value={m.onlineDrivers} accent="cyan" />
         </div>
 
         <GlassCard className="p-3">
@@ -51,6 +48,9 @@ export function CommandCenter({
             Live active trips
           </h3>
           <div className="space-y-1.5">
+            {liveTrips.length === 0 && tripPhase === 'idle' && (
+              <p className="py-2 text-center text-[10px] text-slate-600">No active trips</p>
+            )}
             {liveTrips.map((t) => (
               <div
                 key={t.id}
@@ -88,10 +88,12 @@ export function CommandCenter({
 
         <GlassCard className="border-amber-500/15 p-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-amber-400">Congestion alerts</h3>
+            <h3 className="text-xs font-bold text-amber-400">Delayed trips</h3>
             <span className="text-sm font-bold text-amber-300">{delayed}</span>
           </div>
-          <p className="mt-1 text-[10px] text-slate-500">MG Road · Cyber Hub · peak +18%</p>
+          <p className="mt-1 text-[10px] text-slate-500">
+            {delayed > 0 ? 'Active delays detected on NCR corridors' : 'No delays reported'}
+          </p>
         </GlassCard>
 
         <GlassCard className="p-3">
@@ -99,7 +101,9 @@ export function CommandCenter({
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
               City velocity
             </p>
-            <span className="text-[10px] text-cyan-400">{ops.cityVelocity || DEMO_OPS.cityVelocity} km/h</span>
+            <span className="text-[10px] text-cyan-400">
+              {ops.cityVelocity > 0 ? `${ops.cityVelocity} km/h` : '—'}
+            </span>
           </div>
           <div className="flex h-14 items-end gap-0.5">
             {[52, 68, 45, 82, 61, 94, 73, 88, 58, 76, 90, 65].map((h, i) => (

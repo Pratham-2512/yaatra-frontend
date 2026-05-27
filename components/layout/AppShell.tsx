@@ -3,6 +3,7 @@
 import { NAV_ITEMS } from '@/lib/constants';
 import type { NavRole } from '@/lib/types';
 import { glass } from '@/components/ui/styles';
+import { useAuth } from '@/context/AuthContext';
 
 export function AppShell({
   userType,
@@ -21,6 +22,7 @@ export function AppShell({
   subtitle: string;
   children: React.ReactNode;
 }) {
+  const { profile, signOut, demoMode } = useAuth();
   const wide = userType === 'admin';
 
   return (
@@ -128,9 +130,24 @@ export function AppShell({
                 minute: '2-digit',
               })}
             </span>
+            {profile && (
+              <span className="hidden rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-slate-400 md:inline">
+                {profile.full_name.split(' ')[0]}
+              </span>
+            )}
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-orange-500/20 to-cyan-500/10 text-xs ring-1 ring-white/10">
-              👤
+              {profile?.role === 'driver' ? '🛺' : '👤'}
             </div>
+            {!demoMode && (
+              <button
+                type="button"
+                onClick={() => signOut()}
+                title="Sign out"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-[11px] text-slate-500 transition hover:border-rose-500/30 hover:text-rose-400"
+              >
+                ⏻
+              </button>
+            )}
           </div>
         </header>
 
