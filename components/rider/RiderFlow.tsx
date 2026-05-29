@@ -24,6 +24,7 @@ import {
 
 import {
   VEHICLE_TYPES,
+  VEHICLE_CAPACITY,
 } from '@/lib/constants';
 
 import {
@@ -125,6 +126,12 @@ export function RiderHome({ tabBar }: { tabBar?: React.ReactNode }) {
               : VEHICLE_TYPES.map((type) => {
                   const p = VEHICLE_PRICING[type];
                   const active = riderState.vehicleType === type;
+                  const capacity = VEHICLE_CAPACITY[type];
+                  const catColor = p.category === 'premium'
+                    ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                    : p.category === 'standard'
+                    ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+                    : 'text-slate-400 bg-white/5 border-white/10';
 
                   return (
                     <button
@@ -133,13 +140,21 @@ export function RiderHome({ tabBar }: { tabBar?: React.ReactNode }) {
                       onClick={() => setRiderState((s) => ({ ...s, vehicleType: type }))}
                       className={`group relative overflow-hidden rounded-xl border p-3 text-left transition-all duration-200 ${
                         active
-                          ? 'scale-[1.03] border-orange-500/60 bg-gradient-to-br from-orange-500/20 via-orange-500/10 to-transparent shadow-lg shadow-orange-900/40 ring-1 ring-orange-500/40'
-                          : 'border-white/[0.06] bg-[#0a1020]/60 hover:scale-[1.01] hover:border-white/15 hover:bg-[#0a1020]/80'
+                          ? 'scale-[1.02] border-orange-500/60 bg-gradient-to-br from-orange-500/20 via-orange-500/10 to-transparent shadow-lg shadow-orange-900/40 ring-1 ring-orange-500/40'
+                          : 'border-white/[0.06] bg-[#0a1020]/60 hover:border-white/15 hover:bg-[#0a1020]/80'
                       }`}
                     >
-                      <span className="text-xl">{p.icon}</span>
-                      <p className="mt-1 text-xs font-semibold text-slate-300">{p.label}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{p.description}</p>
+                      <div className="mb-1 flex items-start justify-between">
+                        <span className="text-xl">{p.icon}</span>
+                        <span className={`rounded border px-1.5 py-px text-[8px] font-bold capitalize ${catColor}`}>
+                          {p.category}
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-200">{p.label}</p>
+                      <p className="text-[9px] text-slate-500">{p.description}</p>
+                      <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-600">
+                        <span>👤 {capacity}</span>
+                      </div>
                     </button>
                   );
                 })}
@@ -361,6 +376,51 @@ export function RiderDriverArriving() {
   );
 }
 
+export function RiderDriverReached() {
+  const { riderState, startTrip, cancelSearch } = useRide();
+  const driver = riderState.driver;
+  const initials = driver?.name?.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() ?? '?';
+
+  return (
+    <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
+      <RideStatusTimeline />
+
+      {/* Arrived banner */}
+      <div className="mb-4 flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3">
+        <span className="text-2xl">📍</span>
+        <div>
+          <p className="text-xs font-bold text-emerald-400">Driver has arrived!</p>
+          <p className="text-[11px] text-slate-400">Waiting at your pickup point</p>
+        </div>
+      </div>
+
+      {/* Driver card */}
+      <div className="mb-4 rounded-xl border border-white/[0.08] bg-[#0a1020]/60 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500/30 to-cyan-500/20 text-base font-bold text-white ring-1 ring-white/10">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-white">{driver?.name ?? 'Driver'}</p>
+            <p className="text-[10px] text-slate-500">{driver?.vehicle} · {driver?.plate}</p>
+            <p className="text-[10px] font-semibold text-amber-400">★ {driver?.rating ?? 4.9}</p>
+          </div>
+          <ChatToggleButton />
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button type="button" onClick={cancelSearch} className={`${btnGhost} flex-1 text-xs`}>
+          Cancel
+        </button>
+        <button type="button" onClick={startTrip} className={`${btnPrimary} flex-[2]`}>
+          Board & start trip →
+        </button>
+      </div>
+    </GlassCard>
+  );
+}
+
 export function RiderInTrip() {
   const { riderState } = useRide();
   const pct = Math.min(Math.round(riderState.progress), 100);
@@ -398,15 +458,43 @@ const PAY_METHODS: { id: PayMethod; label: string; icon: string; sub: string }[]
   { id: 'wallet', label: 'Wallet', icon: '👛', sub: 'Yaatra wallet balance'   },
 ];
 
+const PROMO_CODES: Record<string, { label: string; discount: (fare: number) => number }> = {
+  YAATRA10:   { label: '10% off',  discount: (f) => Math.min(Math.round(f * 0.1), 50) },
+  WELCOME20:  { label: '₹20 off',  discount: () => 20  },
+  FIRSTRIDE:  { label: '₹30 off',  discount: () => 30  },
+  SAVE50:     { label: '₹50 off',  discount: () => 50  },
+};
+
 export function RiderPayment() {
   const { riderState, setRiderState, completePayment } = useRide();
   const [method, setMethodLocal] = useState<PayMethod>('upi');
   const [paying, setPaying] = useState(false);
+  const [promoInput, setPromoInput] = useState('');
+  const [promoApplied, setPromoApplied] = useState('');
+  const [promoError, setPromoError] = useState('');
 
   const setMethod = (m: PayMethod) => {
     setMethodLocal(m);
     setRiderState((prev) => ({ ...prev, paymentMethod: m }));
   };
+
+  const applyPromo = () => {
+    const code = promoInput.trim().toUpperCase();
+    if (PROMO_CODES[code]) {
+      setPromoApplied(code);
+      setPromoError('');
+    } else {
+      setPromoError('Invalid promo code');
+      setPromoApplied('');
+    }
+  };
+
+  const fare = riderState.fare;
+  const baseFare = fare?.totalFare ?? 0;
+  const platformFee = fare?.platformFee ?? 15;
+  const tax = fare?.tax ?? Math.round(baseFare * 0.05);
+  const promoDiscount = promoApplied ? PROMO_CODES[promoApplied].discount(baseFare) : 0;
+  const grandTotal = Math.max(0, baseFare - promoDiscount);
 
   const handlePay = async () => {
     setPaying(true);
@@ -415,24 +503,58 @@ export function RiderPayment() {
     completePayment();
   };
 
-  const fare = riderState.fare?.totalFare ?? 0;
-
   return (
-    <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
+    <GlassCard className="z-10 flex shrink-0 flex-col gap-3 overflow-y-auto p-4 lg:max-w-sm lg:border-l lg:p-5">
       <RideStatusTimeline />
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-orange-400">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-orange-400">
         Payment
       </p>
 
-      {/* Trip summary */}
-      <TripSummaryCard />
-      <div className="my-3" />
+      {/* Full fare breakdown */}
+      <div className="rounded-xl border border-white/[0.06] bg-[#0a1020]/60 p-3 text-xs">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          Fare breakdown
+        </p>
+        <div className="space-y-1.5 text-[11px]">
+          <div className="flex justify-between"><span className="text-slate-400">Base fare</span><span className="text-slate-300">₹{fare?.base ?? 0}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Distance ({riderState.distance} km)</span><span className="text-slate-300">₹{fare?.distanceCharge ?? 0}</span></div>
+          {(fare?.surge ?? 0) > 0 && (
+            <div className="flex justify-between text-orange-400/80"><span>Surge ({fare?.surgeFactor}×)</span><span>+₹{fare?.surge}</span></div>
+          )}
+          <div className="flex justify-between"><span className="text-slate-400">Platform fee</span><span className="text-slate-300">₹{platformFee}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">GST (5%)</span><span className="text-slate-300">₹{tax}</span></div>
+          {promoDiscount > 0 && (
+            <div className="flex justify-between text-emerald-400"><span>Promo ({promoApplied})</span><span>−₹{promoDiscount}</span></div>
+          )}
+        </div>
+        <div className="my-2 h-px bg-white/[0.06]" />
+        <div className="flex justify-between text-sm font-bold">
+          <span className="text-slate-200">Total</span>
+          <span className="text-orange-400">₹{grandTotal}</span>
+        </div>
+      </div>
+
+      {/* Promo code */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="Promo code"
+          value={promoInput}
+          onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); }}
+          className={`${inputField} flex-1 text-xs`}
+        />
+        <button type="button" onClick={applyPromo} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 text-xs font-semibold text-cyan-400 transition hover:bg-cyan-500/20">
+          Apply
+        </button>
+      </div>
+      {promoError && <p className="text-[10px] text-rose-400">{promoError}</p>}
+      {promoApplied && <p className="text-[10px] text-emerald-400">✓ {PROMO_CODES[promoApplied].label} applied!</p>}
 
       {/* Payment methods */}
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-        Select payment method
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+        Payment method
       </p>
-      <div className="mb-4 grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {PAY_METHODS.map((m) => {
           const active = method === m.id;
           return (
@@ -440,26 +562,24 @@ export function RiderPayment() {
               key={m.id}
               type="button"
               onClick={() => setMethod(m.id)}
-              className={`flex flex-col items-start rounded-xl border p-3 text-left transition-all ${
+              className={`flex items-center gap-2 rounded-xl border p-2.5 text-left transition-all ${
                 active
-                  ? 'border-orange-500/50 bg-gradient-to-br from-orange-500/15 to-transparent ring-1 ring-orange-500/30'
+                  ? 'border-orange-500/50 bg-orange-500/10 ring-1 ring-orange-500/30'
                   : 'border-white/[0.06] bg-[#0a1020]/60 hover:border-white/15'
               }`}
             >
-              <span className="mb-1 text-lg">{m.icon}</span>
-              <p className={`text-xs font-semibold ${active ? 'text-white' : 'text-slate-300'}`}>
-                {m.label}
-              </p>
-              <p className="text-[9px] text-slate-600">{m.sub}</p>
+              <span className="text-base">{m.icon}</span>
+              <div>
+                <p className={`text-xs font-semibold ${active ? 'text-white' : 'text-slate-300'}`}>{m.label}</p>
+                <p className="text-[9px] text-slate-600">{m.sub}</p>
+              </div>
             </button>
           );
         })}
       </div>
 
       <button type="button" onClick={handlePay} disabled={paying} className={btnPrimary}>
-        {paying
-          ? 'Processing…'
-          : `Pay ₹${fare} via ${PAY_METHODS.find((m) => m.id === method)?.label} →`}
+        {paying ? 'Processing…' : `Pay ₹${grandTotal} via ${PAY_METHODS.find((m) => m.id === method)?.label} →`}
       </button>
     </GlassCard>
   );

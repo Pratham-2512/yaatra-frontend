@@ -4,6 +4,8 @@ export interface FareEstimate {
   distanceCharge?: number;
   surge?: number;
   surgeFactor?: number;
+  platformFee?: number;
+  tax?: number;
 }
 
 export interface DriverInfo {
@@ -21,6 +23,7 @@ export type TripPhase =
   | 'searching'
   | 'assigned'
   | 'arriving'
+  | 'reached'
   | 'inTrip'
   | 'payment'
   | 'rating';

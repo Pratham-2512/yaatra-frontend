@@ -11,6 +11,7 @@ import MapPanel from '@/components/map/MapPanel';
 import {
   RiderConfirm,
   RiderDriverArriving,
+  RiderDriverReached,
   RiderHome,
   RiderInTrip,
   RiderPayment,
@@ -157,6 +158,7 @@ function YaatraShell() {
         case 'confirm':      return <RiderConfirm />;
         case 'searching':    return <RiderSearching />;
         case 'driverArriving': return <RiderDriverArriving />;
+        case 'reached':        return <RiderDriverReached />;
         case 'inTrip':       return <RiderInTrip />;
         case 'payment':      return <RiderPayment />;
         case 'rating':       return <RiderRating />;

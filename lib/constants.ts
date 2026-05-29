@@ -6,9 +6,13 @@ export const NAV_ITEMS: { id: NavRole; label: string; sub: string; icon: string 
   { id: 'admin', label: 'Command', sub: 'Ops intelligence', icon: '📊' },
 ];
 
-export type VehicleType = 'bike' | 'auto' | 'sedan' | 'suv';
+export type VehicleType = 'bike' | 'auto' | 'mini' | 'sedan' | 'suv' | 'premium';
 
-export const VEHICLE_TYPES: VehicleType[] = ['bike', 'auto', 'sedan', 'suv'];
+export const VEHICLE_TYPES: VehicleType[] = ['bike', 'auto', 'mini', 'sedan', 'suv', 'premium'];
+
+export const VEHICLE_CAPACITY: Record<VehicleType, number> = {
+  bike: 1, auto: 3, mini: 4, sedan: 4, suv: 6, premium: 4,
+};
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Book a ride',
@@ -20,6 +24,7 @@ export const SCREEN_TITLES: Record<string, string> = {
   rating: 'Rate your trip',
   command: 'Operations command',
   pickup: 'Navigate to pickup',
+  reached: 'Driver arrived',
 };
 
 export const initialRiderState: RiderState = {

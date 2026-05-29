@@ -6,7 +6,8 @@ import type { TripPhase } from '@/lib/types';
 const STEPS = [
   { label: 'Searching' },
   { label: 'Arriving'  },
-  { label: 'Active'    },
+  { label: 'At Pickup' },
+  { label: 'In Trip'   },
   { label: 'Done'      },
 ];
 
@@ -15,9 +16,10 @@ function phaseToStep(phase: TripPhase): number {
     case 'searching':          return 0;
     case 'assigned':
     case 'arriving':           return 1;
-    case 'inTrip':             return 2;
+    case 'reached':            return 2;
+    case 'inTrip':             return 3;
     case 'payment':
-    case 'rating':             return 3;
+    case 'rating':             return 4;
     default:                   return -1;
   }
 }
@@ -34,17 +36,17 @@ export function RideStatusTimeline() {
           <div className="flex w-full items-center">
             {i > 0 && (
               <div
-                className={`h-px flex-1 transition-all duration-500 ${
+                className={`h-px flex-1 transition-all duration-700 ${
                   i <= current ? 'bg-orange-500' : 'bg-white/10'
                 }`}
               />
             )}
             <div
-              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold transition-all duration-300 ${
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold transition-all duration-500 ${
                 i < current
                   ? 'border-orange-500 bg-orange-500 text-white'
                   : i === current
-                    ? 'border-orange-500 bg-orange-500/20 text-orange-400 shadow-[0_0_10px_rgba(255,107,53,0.4)]'
+                    ? 'border-orange-500 bg-orange-500/20 text-orange-400 shadow-[0_0_12px_rgba(255,107,53,0.5)] animate-pulse'
                     : 'border-white/15 bg-white/5 text-slate-700'
               }`}
             >
@@ -52,7 +54,7 @@ export function RideStatusTimeline() {
             </div>
             {i < STEPS.length - 1 && (
               <div
-                className={`h-px flex-1 transition-all duration-500 ${
+                className={`h-px flex-1 transition-all duration-700 ${
                   i < current ? 'bg-orange-500' : 'bg-white/10'
                 }`}
               />

@@ -5,7 +5,7 @@ import { useRide } from '@/context/RideContext';
 
 export function ChatToggleButton() {
   const { chatOpen, setChatOpen, unreadChatCount, tripPhase } = useRide();
-  const visible = ['arriving', 'inTrip'].includes(tripPhase);
+  const visible = ['arriving', 'reached', 'inTrip'].includes(tripPhase);
   if (!visible) return null;
 
   return (
@@ -29,6 +29,7 @@ export function TripChat() {
   const {
     chatMessages,
     chatOpen,
+    chatTyping,
     setChatOpen,
     sendChatMessage,
     userType,
@@ -139,6 +140,22 @@ export function TripChat() {
                 </div>
               );
             })
+          )}
+          {/* Typing indicator */}
+          {chatTyping && (
+            <div className="flex items-start gap-2">
+              <div className="rounded-2xl rounded-tl-sm bg-white/[0.07] px-3 py-2">
+                <div className="flex gap-1 py-0.5">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="h-1.5 w-1.5 rounded-full bg-slate-400"
+                      style={{ animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
           <div ref={bottomRef} />
         </div>
