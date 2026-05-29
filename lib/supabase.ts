@@ -16,9 +16,8 @@ function makeClient(): SupabaseClient | null {
 
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
-      // No session persistence needed — anon key only, no user auth
-      persistSession: false,
-      autoRefreshToken: false,
+      persistSession: true,
+      autoRefreshToken: true,
       detectSessionInUrl: false,
     },
   });

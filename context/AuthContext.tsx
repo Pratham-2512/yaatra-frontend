@@ -7,25 +7,24 @@ import {
   useEffect,
   useState,
 } from 'react';
-import type { Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
 import {
   type Profile,
   type DriverApplicationInput,
-  getProfile,
-  signOut as _signOut,
-  signUpUser,
-  signIn as _signIn,
-  changePassword as _changePassword,
-  submitDriverApplication as _submitDriver,
-} from '@/lib/supabaseAuth';
+  localSignUp,
+  localSignIn,
+  localSignOut,
+  localChangePassword,
+  localGetProfile,
+  localGetSession,
+  localSubmitDriverApplication,
+} from '@/lib/localAuth';
 
 interface AuthContextValue {
   loading: boolean;
-  session: Session | null;
+  session: string | null;
   profile: Profile | null;
   demoMode: boolean;
-  signUp: (fullName: string, mobile: string, role?: 'rider' | 'driver') => Promise<{ error: string | null }>;
+  signUp: (fullName: string, mobile: string, role?: 'rider' | 'driver', email?: string) => Promise<{ error: string | null }>;
   signIn: (mobile: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   changePassword: (newPassword: string) => Promise<{ error: string | null }>;
@@ -36,65 +35,53 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const demoMode = !supabase;
-  const [loading, setLoading] = useState(!demoMode);
-  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
 
-  const refreshProfile = useCallback(async () => {
-    const p = await getProfile();
-    setProfile(p);
+  useEffect(() => {
+    const sid = localGetSession();
+    setSession(sid);
+    if (sid) setProfile(localGetProfile());
+    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    if (demoMode) return;
+  const refreshProfile = useCallback(async () => {
+    setProfile(localGetProfile());
+  }, []);
 
-    supabase!.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session) getProfile().then(setProfile);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase!.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess);
-      if (!sess) setProfile(null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [demoMode]);
-
-  const signUp = useCallback(async (fullName: string, mobile: string, role: 'rider' | 'driver' = 'rider') => {
-    const result = await signUpUser(fullName, mobile, role);
+  const signUp = useCallback(async (fullName: string, mobile: string, role: 'rider' | 'driver' = 'rider', email?: string) => {
+    const result = localSignUp(fullName, mobile, role, email);
     if (!result.error) {
-      const p = await getProfile();
-      setProfile(p);
+      setSession(result.userId);
+      setProfile(localGetProfile());
     }
     return { error: result.error };
   }, []);
 
   const signIn = useCallback(async (mobile: string, password: string) => {
-    const result = await _signIn(mobile, password);
+    const result = localSignIn(mobile, password);
     if (!result.error) {
-      const p = await getProfile();
-      setProfile(p);
+      setSession(localGetSession());
+      setProfile(localGetProfile());
     }
     return result;
   }, []);
 
   const signOut = useCallback(async () => {
-    await _signOut();
+    localSignOut();
     setSession(null);
     setProfile(null);
   }, []);
 
   const changePassword = useCallback(async (newPassword: string) => {
-    const result = await _changePassword(newPassword);
+    const result = localChangePassword(newPassword);
     if (!result.error) await refreshProfile();
     return result;
   }, [refreshProfile]);
 
   const submitDriverApplication = useCallback(async (userId: string, data: DriverApplicationInput) => {
-    return _submitDriver(userId, data);
+    return localSubmitDriverApplication(userId, data);
   }, []);
 
   return (
@@ -102,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       session,
       profile,
-      demoMode,
+      demoMode: false,
       signUp,
       signIn,
       signOut,

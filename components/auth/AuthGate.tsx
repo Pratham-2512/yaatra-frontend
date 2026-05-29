@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { btnPrimary, btnGhost, inputField, labelCaps } from '@/components/ui/styles';
-import type { DriverApplicationInput } from '@/lib/supabaseAuth';
+import type { DriverApplicationInput } from '@/lib/localAuth';
 
 // ── Shared layout ─────────────────────────────────────────────────────────────
 function AuthShell({ children }: { children: React.ReactNode }) {
@@ -44,6 +44,7 @@ function LoginView({ onDriverApply }: { onDriverApply: () => void }) {
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -61,7 +62,7 @@ function LoginView({ onDriverApply }: { onDriverApply: () => void }) {
     if (!fullName.trim() || !mobile.trim()) { setError('Enter your full name and mobile number.'); return; }
     if (mobile.replace(/\D/g, '').length < 10) { setError('Enter a valid 10-digit mobile number.'); return; }
     setError(''); setLoading(true);
-    const { error: err } = await signUp(fullName.trim(), mobile.trim(), 'rider');
+    const { error: err } = await signUp(fullName.trim(), mobile.trim(), 'rider', email.trim() || undefined);
     setLoading(false);
     if (err) setError(err);
   };
@@ -112,8 +113,12 @@ function LoginView({ onDriverApply }: { onDriverApply: () => void }) {
               <input type="tel" placeholder="98XXXXXXXX" value={mobile}
                 onChange={(e) => setMobile(e.target.value)} className={inputField} />
             </Field>
+            <Field label="Email Address (optional)">
+              <input type="email" placeholder="rahul@example.com" value={email}
+                onChange={(e) => setEmail(e.target.value)} className={inputField} />
+            </Field>
             <p className="text-[10px] text-slate-500">
-              Default password is <span className="font-mono text-slate-400">123456</span> &mdash; you&apos;ll be asked to change it after signup.
+              Sign in uses your <span className="text-slate-400">mobile number</span>. Default password is <span className="font-mono text-slate-400">123456</span> &mdash; you&apos;ll be asked to change it after signup.
             </p>
             {error && <p className="text-[11px] text-rose-400">{error}</p>}
             <button type="submit" disabled={loading} className={`${btnPrimary} mt-1`}>
@@ -235,7 +240,7 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
     }
     setError(''); setSubmitting(true);
 
-    const { error: signUpErr } = await signUp(fullName.trim(), mobile.trim(), 'driver');
+    const { error: signUpErr } = await signUp(fullName.trim(), mobile.trim(), 'driver', email.trim() || undefined);
     if (signUpErr) { setError(signUpErr); setSubmitting(false); return; }
 
     // Get userId after signup — profile was just created
@@ -315,6 +320,7 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
             <Field label="Email (optional)">
               <input type="email" placeholder="rahul@example.com" value={email}
                 onChange={(e) => setEmail(e.target.value)} className={inputField} />
+              <p className="mt-1 text-[10px] text-slate-500">Sign-in uses your <span className="text-slate-400">mobile number</span>. Email is for contact only.</p>
             </Field>
             <Field label="Address">
               <input type="text" placeholder="Sector 22, Gurgaon" value={address}
