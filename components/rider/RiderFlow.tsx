@@ -41,7 +41,7 @@ function VehicleCardSkeleton() {
   );
 }
 
-export function RiderHome() {
+export function RiderHome({ tabBar }: { tabBar?: React.ReactNode }) {
   const {
     riderState,
     setRiderState,
@@ -50,8 +50,9 @@ export function RiderHome() {
     gpsStatus,
   } = useRide();
 
-  const dist = parseFloat(riderState.distance ?? '5') || 5;
-  const hasRealDistance = riderState.distance !== null;
+  const hasPickup = riderState.pickup.trim().length > 0;
+  const hasDropoff = riderState.dropoff.trim().length > 0;
+  const bothLocations = hasPickup && hasDropoff;
 
   // Surge factor is read once per render — stable for the session duration.
   const surgeFactor = useMemo(() => getSurgeFactor(), []);
@@ -60,6 +61,8 @@ export function RiderHome() {
 
   return (
     <GlassCard className="animate-slide-up z-10 flex shrink-0 flex-col border-t border-white/10 p-4 lg:max-w-md lg:border-l lg:border-t-0 lg:p-5">
+      {tabBar}
+
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
           <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-orange-400/90">
@@ -93,7 +96,7 @@ export function RiderHome() {
           <label className={labelCaps}>Dropoff</label>
           <input
             type="text"
-            placeholder="Sector 18, Gurgaon"
+            placeholder="Cyber Hub, Gurgaon"
             value={riderState.dropoff}
             onChange={(e) => setRiderState((p) => ({ ...p, dropoff: e.target.value }))}
             className={inputField}
@@ -101,64 +104,66 @@ export function RiderHome() {
         </div>
       </div>
 
-      {/* Vehicle label row + optional surge chip */}
-      <div className="mb-2 flex items-center justify-between">
-        <p className={labelCaps}>Select vehicle</p>
-        {surgeActive && (
-          <span className="flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[9px] font-bold text-orange-400">
-            ⚡ {surgeFactor}× surge · {surgeLabel}
-          </span>
-        )}
-      </div>
+      {/* Vehicle selector — only shown once both locations are filled */}
+      {bothLocations ? (
+        <>
+          <div className="mb-2 flex items-center justify-between">
+            <p className={labelCaps}>Select vehicle</p>
+            {surgeActive && (
+              <span className="flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[9px] font-bold text-orange-400">
+                ⚡ {surgeFactor}× surge · {surgeLabel}
+              </span>
+            )}
+          </div>
 
-      {/* Vehicle cards — shimmer while calculating, real cards otherwise */}
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        {isEstimating
-          ? VEHICLE_TYPES.map((t) => <VehicleCardSkeleton key={t} />)
-          : VEHICLE_TYPES.map((type) => {
-              const p = VEHICLE_PRICING[type];
-              const active = riderState.vehicleType === type;
-              const quote = getVehicleQuote(type, dist);
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            {isEstimating
+              ? VEHICLE_TYPES.map((t) => <VehicleCardSkeleton key={t} />)
+              : VEHICLE_TYPES.map((type) => {
+                  const p = VEHICLE_PRICING[type];
+                  const active = riderState.vehicleType === type;
 
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setRiderState((s) => ({ ...s, vehicleType: type }))}
-                  className={`group relative overflow-hidden rounded-xl border p-3 text-left transition-all duration-200 ${
-                    active
-                      ? 'scale-[1.03] border-orange-500/60 bg-gradient-to-br from-orange-500/20 via-orange-500/10 to-transparent shadow-lg shadow-orange-900/40 ring-1 ring-orange-500/40'
-                      : 'border-white/[0.06] bg-[#0a1020]/60 hover:scale-[1.01] hover:border-white/15 hover:bg-[#0a1020]/80'
-                  }`}
-                >
-                  <span className="text-xl">{p.icon}</span>
-                  <p className="mt-1 text-xs font-semibold text-slate-300">{p.label}</p>
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setRiderState((s) => ({ ...s, vehicleType: type }))}
+                      className={`group relative overflow-hidden rounded-xl border p-3 text-left transition-all duration-200 ${
+                        active
+                          ? 'scale-[1.03] border-orange-500/60 bg-gradient-to-br from-orange-500/20 via-orange-500/10 to-transparent shadow-lg shadow-orange-900/40 ring-1 ring-orange-500/40'
+                          : 'border-white/[0.06] bg-[#0a1020]/60 hover:scale-[1.01] hover:border-white/15 hover:bg-[#0a1020]/80'
+                      }`}
+                    >
+                      <span className="text-xl">{p.icon}</span>
+                      <p className="mt-1 text-xs font-semibold text-slate-300">{p.label}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{p.description}</p>
+                    </button>
+                  );
+                })}
+          </div>
 
-                  <p className="mt-0.5 text-sm font-bold text-white">
-                    {hasRealDistance ? '~' : ''}₹{quote.fare}
-                    {quote.surgeFactor > 1 && (
-                      <span className="ml-1.5 rounded-full border border-orange-500/30 bg-orange-500/15 px-1 py-px text-[9px] font-bold text-orange-400">
-                        {quote.surgeFactor}×
-                      </span>
-                    )}
-                  </p>
-
-                  <p className="text-[10px] text-cyan-400/90">
-                    {quote.etaMin} min · {quote.description}
-                  </p>
-                </button>
-              );
-            })}
-      </div>
-
-      <button
-        type="button"
-        onClick={estimateFare}
-        disabled={isEstimating}
-        className={btnPrimary}
-      >
-        {isEstimating ? 'Calculating route…' : 'Get fare estimate →'}
-      </button>
+          <button
+            type="button"
+            onClick={estimateFare}
+            disabled={isEstimating}
+            className={btnPrimary}
+          >
+            {isEstimating ? 'Calculating route…' : 'Get fare estimate →'}
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-white/10 py-8 text-center">
+          <span className="mb-2 text-2xl opacity-40">🗺️</span>
+          <p className="text-xs font-semibold text-slate-400">
+            {!hasPickup && !hasDropoff
+              ? 'Enter pickup & dropoff to see vehicles and fares'
+              : !hasPickup
+                ? 'Enter your pickup location'
+                : 'Enter your dropoff location'}
+          </p>
+          <p className="mt-1 text-[10px] text-slate-600">Fares are calculated after route is known</p>
+        </div>
+      )}
     </GlassCard>
   );
 }

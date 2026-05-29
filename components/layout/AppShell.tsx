@@ -12,6 +12,7 @@ export function AppShell({
   setSidebarOpen,
   title,
   subtitle,
+  allowedNavIds,
   children,
 }: {
   userType: NavRole;
@@ -20,10 +21,14 @@ export function AppShell({
   setSidebarOpen: (o: boolean) => void;
   title: string;
   subtitle: string;
+  allowedNavIds?: string[];
   children: React.ReactNode;
 }) {
   const { profile, signOut, demoMode } = useAuth();
   const wide = userType === 'admin';
+  const visibleNavItems = allowedNavIds
+    ? NAV_ITEMS.filter((item) => allowedNavIds.includes(item.id))
+    : NAV_ITEMS;
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-[#05080f]">
@@ -58,7 +63,7 @@ export function AppShell({
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3 scrollbar-thin">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = userType === item.id;
             return (
               <button
@@ -160,7 +165,7 @@ export function AppShell({
         </main>
 
         <nav className="flex shrink-0 gap-0.5 border-t border-white/[0.06] bg-[#080d18]/95 p-1.5 backdrop-blur-xl lg:hidden">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <button
               key={item.id}
               type="button"

@@ -6,11 +6,12 @@ import { KpiWidget } from '@/components/ui/KpiWidget';
 import { btnPrimary } from '@/components/ui/styles';
 import { DEMAND_ZONES } from '@/lib/geo';
 
-export function DriverHome() {
+export function DriverHome({ tabBar }: { tabBar?: React.ReactNode }) {
   const { driverState, toggleOnline, acceptRide, rejectRide } = useRide();
 
   return (
     <div className="scrollbar-thin flex w-full shrink-0 flex-col gap-3 overflow-y-auto border-t border-white/[0.06] p-3 md:p-4 lg:w-80 lg:border-l lg:border-t-0 lg:p-4">
+      {tabBar}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-[9px] font-bold uppercase tracking-widest text-cyan-500/90">

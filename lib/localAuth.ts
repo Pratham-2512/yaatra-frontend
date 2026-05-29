@@ -132,6 +132,44 @@ export function localGetSession(): string | null {
   return getSessionId();
 }
 
+// ── Trip history ──────────────────────────────────────────────────────────────
+
+export interface StoredTrip {
+  id: string;
+  pickup: string;
+  dropoff: string;
+  vehicleType: string;
+  fare: number;
+  distanceKm: string;
+  durationMin: string | number;
+  status: 'completed' | 'cancelled';
+  driverName: string;
+  rating: number;
+  createdAt: string;
+  completedAt: string;
+}
+
+function tripsKey(userId: string): string {
+  return `yaatra_trips_${userId}`;
+}
+
+export function saveTrip(userId: string, trip: Omit<StoredTrip, 'id'>): void {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    const key = tripsKey(userId);
+    const trips: StoredTrip[] = JSON.parse(localStorage.getItem(key) ?? '[]');
+    trips.unshift({ id: uid(), ...trip });
+    localStorage.setItem(key, JSON.stringify(trips));
+  } catch { /* silent */ }
+}
+
+export function getTrips(userId: string): StoredTrip[] {
+  if (typeof window === 'undefined' || !userId) return [];
+  try {
+    return JSON.parse(localStorage.getItem(tripsKey(userId)) ?? '[]');
+  } catch { return []; }
+}
+
 export function localSubmitDriverApplication(
   _userId: string,
   input: DriverApplicationInput

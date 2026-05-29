@@ -31,6 +31,7 @@ import { calculateFare, VEHICLE_PRICING, type VehicleType } from '@/services/pri
 import { resolveRoute } from '@/services/routing';
 import { interpolateRoute } from '@/lib/geo';
 import { insertRide } from '@/lib/supabaseRides';
+import { saveTrip, localGetSession } from '@/lib/localAuth';
 import { useToast } from './ToastContext';
 
 const DEFAULT_DRIVER: DriverInfo = {
@@ -506,6 +507,22 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* simulated */
     }
+    const userId = localGetSession();
+    if (userId) {
+      saveTrip(userId, {
+        pickup: riderState.pickup,
+        dropoff: riderState.dropoff,
+        vehicleType: riderState.vehicleType,
+        fare: riderState.fare?.totalFare ?? 0,
+        distanceKm: riderState.distance ?? '0',
+        durationMin: riderState.duration ?? 0,
+        status: 'completed',
+        driverName: riderState.driver?.name ?? 'Fleet Partner',
+        rating: riderState.rating,
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+    }
     clearAnimations();
     setTripPhase('idle');
     setRoute([]);
@@ -583,8 +600,24 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
 
   const completeDriverTrip = useCallback(() => {
     clearAnimations();
-    const fare = driverState.acceptedRide?.fare ?? 'â‚¹285';
+    const fare = driverState.acceptedRide?.fare ?? '₹285';
     const amount = parseInt(fare.replace(/\D/g, ''), 10) || 285;
+    const userId = localGetSession();
+    if (userId && driverState.acceptedRide) {
+      saveTrip(userId, {
+        pickup: driverState.acceptedRide.pickup,
+        dropoff: driverState.acceptedRide.dropoff,
+        vehicleType: driverState.acceptedRide.vehicleType ?? 'sedan',
+        fare: amount,
+        distanceKm: String(driverState.acceptedRide.distance),
+        durationMin: 0,
+        status: 'completed',
+        driverName: 'Self',
+        rating: 0,
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+    }
     setDriverState((prev) => ({
       ...prev,
       screen: 'home',
