@@ -113,6 +113,15 @@ export interface AdminState {
   activeTripList: ActiveTripSummary[];
 }
 
+export interface ChatMessage {
+  id: string;
+  sender: 'rider' | 'driver';
+  senderName: string;
+  text: string;
+  timestamp: string;
+  read: boolean;
+}
+
 export type NavRole = 'rider' | 'driver' | 'admin';
 
 export type MapMode = 'rider' | 'driver' | 'command' | 'searching' | 'trip';

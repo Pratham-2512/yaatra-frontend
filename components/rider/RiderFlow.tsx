@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRide } from '@/context/RideContext';
+import { ChatToggleButton } from '@/components/chat/TripChat';
 
 import {
   GpsStatusChip,
@@ -290,13 +291,21 @@ export function RiderDriverArriving() {
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-cyan-400">
-        Driver en route
-      </p>
-      <h2 className="text-base font-bold text-white">{riderState.driver?.name ?? 'Driver assigned'}</h2>
-      <p className="mb-4 text-xs text-slate-400">
-        {riderState.driver?.vehicle ?? 'Vehicle'} · {riderState.driver?.plate ?? 'Plate pending'}
-      </p>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">
+            Driver en route
+          </p>
+          <h2 className="text-base font-bold text-white">
+            {riderState.driver?.name ?? 'Driver assigned'}
+          </h2>
+          <p className="text-xs text-slate-400">
+            {riderState.driver?.vehicle ?? 'Vehicle'} · {riderState.driver?.plate ?? 'Plate pending'}
+          </p>
+        </div>
+        <ChatToggleButton />
+      </div>
+      <div className="mb-4 mt-3" />
       <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-xl border border-white/[0.06] bg-[#0a1020]/50 p-3">
           <p className="text-slate-500">ETA</p>
@@ -324,9 +333,12 @@ export function RiderInTrip() {
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
-        Trip active
-      </p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+          Trip active
+        </p>
+        <ChatToggleButton />
+      </div>
       <div className="mb-3 h-2 overflow-hidden rounded-full bg-white/10">
         <div
           className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all"
@@ -341,20 +353,80 @@ export function RiderInTrip() {
   );
 }
 
+type PayMethod = 'upi' | 'cash' | 'card' | 'wallet';
+
+const PAY_METHODS: { id: PayMethod; label: string; icon: string; sub: string }[] = [
+  { id: 'upi',    label: 'UPI',    icon: '📱', sub: 'PhonePe · GPay · Paytm' },
+  { id: 'cash',   label: 'Cash',   icon: '💵', sub: 'Pay driver directly'    },
+  { id: 'card',   label: 'Card',   icon: '💳', sub: 'Debit / Credit card'    },
+  { id: 'wallet', label: 'Wallet', icon: '👛', sub: 'Yaatra wallet balance'   },
+];
+
 export function RiderPayment() {
   const { riderState, completePayment } = useRide();
+  const [method, setMethod] = useState<PayMethod>('upi');
+  const [paying, setPaying] = useState(false);
+
+  const handlePay = async () => {
+    setPaying(true);
+    await new Promise((r) => setTimeout(r, 800));
+    completePayment();
+  };
+
+  const fare = riderState.fare?.totalFare ?? 0;
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-orange-400">
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-orange-400">
         Payment
       </p>
-      <div className="mb-4 rounded-xl border border-orange-500/15 bg-[#0a1020]/60 p-4">
+
+      {/* Fare total */}
+      <div className="mb-4 rounded-xl border border-orange-500/15 bg-gradient-to-br from-[#0f1629] to-[#0a1020] p-4">
         <p className="text-xs text-slate-500">Trip total</p>
-        <p className="text-2xl font-bold text-orange-400">₹{riderState.fare?.totalFare ?? 0}</p>
+        <p className="text-2xl font-bold text-orange-400">₹{fare}</p>
+        <p className="mt-1 text-[10px] text-slate-600">
+          {riderState.pickup} → {riderState.dropoff}
+        </p>
       </div>
-      <button type="button" onClick={completePayment} className={btnPrimary}>
-        Pay and continue
+
+      {/* Payment methods */}
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+        Select payment method
+      </p>
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        {PAY_METHODS.map((m) => {
+          const active = method === m.id;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMethod(m.id)}
+              className={`flex flex-col items-start rounded-xl border p-3 text-left transition-all ${
+                active
+                  ? 'border-orange-500/50 bg-gradient-to-br from-orange-500/15 to-transparent ring-1 ring-orange-500/30'
+                  : 'border-white/[0.06] bg-[#0a1020]/60 hover:border-white/15'
+              }`}
+            >
+              <span className="mb-1 text-lg">{m.icon}</span>
+              <p className={`text-xs font-semibold ${active ? 'text-white' : 'text-slate-300'}`}>
+                {m.label}
+              </p>
+              <p className="text-[9px] text-slate-600">{m.sub}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={handlePay}
+        disabled={paying}
+        className={btnPrimary}
+      >
+        {paying
+          ? 'Processing…'
+          : `Pay ₹${fare} via ${PAY_METHODS.find((m) => m.id === method)?.label} →`}
       </button>
     </GlassCard>
   );
@@ -365,35 +437,53 @@ export function RiderRating() {
 
   return (
     <GlassCard className="z-10 shrink-0 p-5 lg:max-w-sm lg:border-l">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-cyan-400">
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-cyan-400">
         Rate your trip
       </p>
-      <div className="mb-4 flex gap-2">
-        {[1, 2, 3, 4, 5].map((rating) => (
+      <p className="mb-3 text-[11px] text-slate-500">
+        How was your ride with {riderState.driver?.name ?? 'your driver'}?
+      </p>
+
+      {/* Star selector */}
+      <div className="mb-1 flex gap-2">
+        {[1, 2, 3, 4, 5].map((star) => (
           <button
-            key={rating}
+            key={star}
             type="button"
-            onClick={() => setRiderState((prev) => ({ ...prev, rating }))}
-            className={`h-10 flex-1 rounded-xl border text-sm font-bold ${
-              riderState.rating >= rating
-                ? 'border-orange-500/50 bg-orange-500/20 text-orange-300'
-                : 'border-white/10 bg-white/[0.04] text-slate-500'
+            onClick={() => setRiderState((prev) => ({ ...prev, rating: star }))}
+            className={`h-10 flex-1 rounded-xl border text-base font-bold transition-all ${
+              riderState.rating >= star
+                ? 'border-orange-500/50 bg-orange-500/20 text-orange-300 scale-105'
+                : 'border-white/10 bg-white/[0.04] text-slate-500 hover:border-white/20'
             }`}
           >
-            {rating}
+            ★
           </button>
         ))}
       </div>
+      {riderState.rating > 0 && (
+        <p className="mb-3 text-center text-[10px] text-slate-500">
+          {['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'][riderState.rating]}
+        </p>
+      )}
+
+      {/* Optional feedback */}
       <textarea
         value={riderState.feedback}
-        onChange={(event) =>
-          setRiderState((prev) => ({ ...prev, feedback: event.target.value }))
-        }
-        placeholder="Feedback"
-        className={`${inputField} mb-3 min-h-24 resize-none`}
+        onChange={(e) => setRiderState((prev) => ({ ...prev, feedback: e.target.value }))}
+        placeholder="Add feedback (optional)…"
+        className={`${inputField} mb-3 min-h-20 resize-none`}
       />
-      <button type="button" onClick={submitRating} className={btnPrimary}>
-        Submit rating
+
+      <button type="button" onClick={submitRating} className={`${btnPrimary} mb-2`}>
+        Submit rating →
+      </button>
+      <button
+        type="button"
+        onClick={submitRating}
+        className={`${btnGhost} w-full text-xs text-slate-500`}
+      >
+        Skip — continue without rating
       </button>
     </GlassCard>
   );

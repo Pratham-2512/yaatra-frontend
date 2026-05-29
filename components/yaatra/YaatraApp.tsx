@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { CommandCenter } from '@/components/command/CommandCenter';
 import { ToastHost } from '@/components/common/ToastHost';
+import { TripChat } from '@/components/chat/TripChat';
 import { DriverHome, DriverInTrip, DriverPickup } from '@/components/driver/DriverFlow';
 import { DriverDashboard } from '@/components/driver/DriverDashboard';
 import { AppShell } from '@/components/layout/AppShell';
@@ -194,6 +195,7 @@ function YaatraShell() {
           {renderContent()}
         </div>
       </AppShell>
+      <TripChat />
       <ToastHost />
     </>
   );

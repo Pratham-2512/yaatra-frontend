@@ -18,6 +18,7 @@ import {
 } from '@/lib/constants';
 import type {
   AdminState,
+  ChatMessage,
   DriverInfo,
   DriverState,
   GpsSyncStatus,
@@ -27,6 +28,7 @@ import type {
   RiderState,
   TripPhase,
 } from '@/lib/types';
+import { useAuth } from './AuthContext';
 import { calculateFare, VEHICLE_PRICING, type VehicleType } from '@/services/pricing';
 import { resolveRoute } from '@/services/routing';
 import { interpolateRoute } from '@/lib/geo';
@@ -98,19 +100,44 @@ interface RideContextValue {
   completeDriverTrip: () => void;
   liveOps: import('@/lib/types').LiveOpsState;
   activeTripList: import('@/lib/types').ActiveTripSummary[];
+
+  chatMessages: ChatMessage[];
+  chatOpen: boolean;
+  setChatOpen: (v: boolean) => void;
+  sendChatMessage: (text: string) => void;
+  unreadChatCount: number;
 }
 
 const RideContext = createContext<RideContextValue | null>(null);
 
 const DRIVER_ID = 'DRV-001';
 
+const DRIVER_AUTO_REPLIES = [
+  'Got it! 👍',
+  'Ok, on my way!',
+  'I can see you on the map.',
+  'Be there in a moment!',
+  'Sure, no problem.',
+];
+
+const RIDER_AUTO_REPLIES = [
+  'Thank you!',
+  'Got it, I\'ll wait here.',
+  'Ok, see you soon! 👋',
+  'Sounds good.',
+  'Perfect, thank you!',
+];
+
 export function RideProvider({ children }: { children: React.ReactNode }) {
   const autoAssignRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { push: toast } = useToast();
+  const { profile } = useAuth();
   const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const driverMoveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [userType, setUserType] = useState<NavRole>('rider');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [riderState, setRiderState] = useState<RiderState>(initialRiderState);
   const [driverState, setDriverState] = useState<DriverState>(initialDriverState);
@@ -135,6 +162,46 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
     animRef.current = null;
     driverMoveRef.current = null;
   }, []);
+
+  const unreadChatCount = chatMessages.filter(
+    (m) => !m.read && m.sender !== (userType === 'driver' ? 'driver' : 'rider')
+  ).length;
+
+  const sendChatMessage = useCallback(
+    (text: string) => {
+      if (!text.trim()) return;
+      const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      const isDriver = userType === 'driver';
+      const msg: ChatMessage = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        sender: isDriver ? 'driver' : 'rider',
+        senderName: profile?.full_name ?? (isDriver ? 'Driver' : 'Rider'),
+        text: text.trim(),
+        timestamp: now,
+        read: true,
+      };
+      setChatMessages((prev) => [...prev, msg]);
+      setChatOpen(true);
+
+      // Simulate a reply from the counterpart after a short delay
+      const replies = isDriver ? RIDER_AUTO_REPLIES : DRIVER_AUTO_REPLIES;
+      const replyName = isDriver
+        ? 'Rider'
+        : (chatMessages.find((m) => m.sender === 'driver')?.senderName ?? 'Driver');
+      setTimeout(() => {
+        const reply: ChatMessage = {
+          id: `${Date.now()}-auto`,
+          sender: isDriver ? 'rider' : 'driver',
+          senderName: replyName,
+          text: replies[Math.floor(Math.random() * replies.length)],
+          timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          read: false,
+        };
+        setChatMessages((prev) => [...prev, reply]);
+      }, 1200 + Math.random() * 800);
+    },
+    [userType, profile, chatMessages]
+  );
 
   useEffect(() => {
     if (userType !== 'admin') return;
@@ -402,7 +469,16 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
         rideId,
       }));
       setTripPhase('arriving');
-      toast('success', 'Driver assigned', `${driver.name} is en route Â· ${driver.eta} min`);
+      toast('success', 'Driver assigned', `${driver.name} is en route · ${driver.eta} min`);
+      const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      setChatMessages([{
+        id: 'seed-0',
+        sender: 'driver',
+        senderName: driver.name,
+        text: `Hi! I'm on my way. I'll be there in ${driver.eta} minutes. 🚗`,
+        timestamp: now,
+        read: false,
+      }]);
 
       if (route.length) {
         setDriverMapPosition(interpolateRoute(route, 0));
@@ -530,9 +606,9 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
     setDropoffCoords(null);
     setRouteSource('none');
     setDriverMapPosition(null);
-    setRiderState({
-      ...initialRiderState,
-    });
+    setChatMessages([]);
+    setChatOpen(false);
+    setRiderState({ ...initialRiderState });
     setDriverState((prev) => ({
       ...prev,
       screen: 'home',
@@ -541,7 +617,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       earnings: prev.earnings + (riderState.fare?.totalFare ?? 285),
       tripsToday: prev.tripsToday + 1,
     }));
-    toast('success', 'Thanks for riding', 'Trip closed Â· fleet quality updated.');
+    toast('success', 'Thanks for riding', 'Trip closed · fleet quality updated.');
   }, [riderState, clearAnimations, toast]);
 
   const cancelSearch = useCallback(() => {
@@ -552,6 +628,8 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
     setDropoffCoords(null);
     setRouteSource('none');
     setDriverMapPosition(null);
+    setChatMessages([]);
+    setChatOpen(false);
     setDriverState((prev) => ({ ...prev, incomingRides: [] }));
     setRiderState((prev) => ({
       ...prev,
@@ -663,6 +741,11 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       completeDriverTrip,
       liveOps: adminState.liveOps,
       activeTripList: adminState.activeTripList,
+      chatMessages,
+      chatOpen,
+      setChatOpen,
+      sendChatMessage,
+      unreadChatCount,
     }),
     [
       userType,
@@ -690,6 +773,10 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       rejectRide,
       driverStartTrip,
       completeDriverTrip,
+      chatMessages,
+      chatOpen,
+      sendChatMessage,
+      unreadChatCount,
     ]
   );
 

@@ -5,6 +5,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { KpiWidget } from '@/components/ui/KpiWidget';
 import { btnPrimary } from '@/components/ui/styles';
 import { DEMAND_ZONES } from '@/lib/geo';
+import { ChatToggleButton } from '@/components/chat/TripChat';
 
 export function DriverHome({ tabBar }: { tabBar?: React.ReactNode }) {
   const { driverState, toggleOnline, acceptRide, rejectRide } = useRide();
@@ -119,16 +120,21 @@ export function DriverPickup() {
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-400">
-        Navigate to pickup
-      </p>
-      <div className="mb-3 text-xs text-slate-400">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
+            Navigate to pickup
+          </p>
+          <p className="mt-0.5 text-sm text-slate-300">
+            Passenger: <span className="text-white">{ride.passenger}</span>
+          </p>
+        </div>
+        <ChatToggleButton />
+      </div>
+      <div className="mb-4 text-xs text-slate-400">
         <p>📍 {ride.pickup}</p>
         <p className="mt-1">🎯 {ride.dropoff}</p>
       </div>
-      <p className="mb-4 text-sm text-slate-300">
-        Passenger: <span className="text-white">{ride.passenger}</span>
-      </p>
       <button type="button" onClick={driverStartTrip} className={btnPrimary}>
         Passenger onboard — start trip
       </button>
@@ -142,9 +148,12 @@ export function DriverInTrip() {
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
-        Trip active · synced
-      </p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+          Trip active · synced
+        </p>
+        <ChatToggleButton />
+      </div>
       <div className="mb-3 h-2 overflow-hidden rounded-full bg-white/10">
         <div
           className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all"
