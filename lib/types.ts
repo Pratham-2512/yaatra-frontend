@@ -42,6 +42,7 @@ export interface RiderState {
   progress: number;
   rating: number;
   feedback: string;
+  paymentMethod: string;
 }
 
 export interface IncomingRide {

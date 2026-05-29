@@ -37,6 +37,7 @@ export const initialRiderState: RiderState = {
   progress: 0,
   rating: 0,
   feedback: '',
+  paymentMethod: 'upi',
 };
 
 export const initialDriverState: DriverState = {

@@ -7,27 +7,23 @@ import { KpiWidget } from '@/components/ui/KpiWidget';
 import { useRide } from '@/context/RideContext';
 import { useAuth } from '@/context/AuthContext';
 
-function MiniBarChart({
+// ── Bar chart ─────────────────────────────────────────────────────────────────
+
+function BarChart({
   data,
-  color = 'emerald',
+  grad = 'from-emerald-500 to-cyan-400',
 }: {
   data: { label: string; value: number }[];
-  color?: 'emerald' | 'orange' | 'cyan';
+  grad?: string;
 }) {
   const max = Math.max(...data.map((d) => d.value), 1);
-  const gradient =
-    color === 'emerald'
-      ? 'from-emerald-500 to-cyan-400'
-      : color === 'orange'
-        ? 'from-orange-500 to-amber-400'
-        : 'from-cyan-500 to-blue-400';
   return (
-    <div className="flex items-end gap-1.5" style={{ height: 56 }}>
+    <div className="flex items-end gap-1.5" style={{ height: 52 }}>
       {data.map((d) => (
         <div key={d.label} className="flex flex-1 flex-col items-center gap-1">
           <div
-            className={`w-full rounded-t-sm bg-gradient-to-t ${gradient} transition-all duration-500`}
-            style={{ height: `${Math.round((d.value / max) * 48)}px`, minHeight: d.value > 0 ? 3 : 0 }}
+            className={`w-full rounded-t-sm bg-gradient-to-t ${grad} transition-all duration-500`}
+            style={{ height: `${Math.round((d.value / max) * 44)}px`, minHeight: d.value > 0 ? 3 : 0 }}
           />
           <span className="font-mono text-[8px] text-slate-600">{d.label}</span>
         </div>
@@ -36,60 +32,102 @@ function MiniBarChart({
   );
 }
 
-const PERF_METRICS = [
-  { label: 'Acceptance rate', value: '94%', bar: 0.94, color: 'emerald-500' },
-  { label: 'On-time arrival', value: '88%', bar: 0.88, color: 'cyan-500' },
-  { label: 'Completion rate', value: '97%', bar: 0.97, color: 'orange-500' },
+// ── Performance metrics ───────────────────────────────────────────────────────
+
+const PERF = [
+  { label: 'Acceptance rate', value: '94%', bar: 0.94, cls: 'bg-emerald-500' },
+  { label: 'On-time arrival',  value: '88%', bar: 0.88, cls: 'bg-cyan-500'   },
+  { label: 'Completion rate',  value: '97%', bar: 0.97, cls: 'bg-orange-500' },
+  { label: 'Cancellation rate',value: '6%',  bar: 0.06, cls: 'bg-rose-500'  },
 ];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function isWithinDays(dateStr: string, days: number): boolean {
+  return Date.now() - new Date(dateStr).getTime() < days * 86_400_000;
+}
+
+function earningSummaryRow(label: string, amount: number, trips: number) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-white/[0.05] bg-[#0a1020]/50 px-3 py-2.5">
+      <div>
+        <p className="text-xs text-slate-300">{label}</p>
+        <p className="mt-0.5 text-[10px] text-slate-600">{trips} trip{trips !== 1 ? 's' : ''}</p>
+      </div>
+      <p className="text-sm font-bold text-emerald-400">₹{amount}</p>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function DriverDashboard({ tabBar }: { tabBar?: React.ReactNode }) {
   const { driverState } = useRide();
   const { session, profile } = useAuth();
-  const trips = useMemo(() => getTrips(session ?? ''), [session]);
-  const completedTrips = useMemo(() => trips.filter((t) => t.status === 'completed'), [trips]);
+  const allTrips = useMemo(() => getTrips(session ?? ''), [session]);
+  const completedTrips = useMemo(() => allTrips.filter((t) => t.status === 'completed'), [allTrips]);
+  const cancelledTrips = useMemo(() => allTrips.filter((t) => t.status === 'cancelled'), [allTrips]);
 
-  const historicalEarnings = useMemo(
-    () => completedTrips.reduce((s, t) => s + t.fare, 0),
+  // Earnings aggregates
+  const historicalTotal = useMemo(() => completedTrips.reduce((s, t) => s + t.fare, 0), [completedTrips]);
+  const todayEarnings   = driverState.earnings; // current session
+  const totalEarnings   = historicalTotal + todayEarnings;
+  const totalTrips      = completedTrips.length + driverState.tripsToday;
+
+  const weekEarnings = useMemo(() => {
+    const earned = completedTrips.filter((t) => isWithinDays(t.createdAt, 7)).reduce((s, t) => s + t.fare, 0);
+    return earned + (isWithinDays(new Date().toISOString(), 7) ? todayEarnings : 0);
+  }, [completedTrips, todayEarnings]);
+
+  const weekTrips = useMemo(
+    () => completedTrips.filter((t) => isWithinDays(t.createdAt, 7)).length + driverState.tripsToday,
+    [completedTrips, driverState.tripsToday]
+  );
+
+  const monthEarnings = useMemo(() => {
+    const now = new Date();
+    const earned = completedTrips.filter((t) => {
+      const td = new Date(t.createdAt);
+      return td.getFullYear() === now.getFullYear() && td.getMonth() === now.getMonth();
+    }).reduce((s, t) => s + t.fare, 0);
+    return earned + todayEarnings;
+  }, [completedTrips, todayEarnings]);
+
+  const monthTrips = useMemo(() => {
+    const now = new Date();
+    return completedTrips.filter((t) => {
+      const td = new Date(t.createdAt);
+      return td.getFullYear() === now.getFullYear() && td.getMonth() === now.getMonth();
+    }).length + driverState.tripsToday;
+  }, [completedTrips, driverState.tripsToday]);
+
+  const totalDistanceKm = useMemo(
+    () => completedTrips.reduce((s, t) => s + parseFloat(String(t.distanceKm) || '0'), 0).toFixed(1),
     [completedTrips]
   );
 
-  const totalEarnings = historicalEarnings + driverState.earnings;
-  const totalTrips = completedTrips.length + driverState.tripsToday;
   const avgEarningPerTrip = totalTrips > 0 ? Math.round(totalEarnings / totalTrips) : 0;
 
+  // Monthly chart data (last 6 months)
   const monthlyEarnings = useMemo(() => {
     const now = new Date();
     return Array.from({ length: 6 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-      const isCurrentMonth =
-        d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-      const historical = completedTrips
-        .filter((t) => {
-          const td = new Date(t.createdAt);
-          return td.getFullYear() === d.getFullYear() && td.getMonth() === d.getMonth();
-        })
+      const isCurrent = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      const hist = completedTrips
+        .filter((t) => { const td = new Date(t.createdAt); return td.getFullYear() === d.getFullYear() && td.getMonth() === d.getMonth(); })
         .reduce((s, t) => s + t.fare, 0);
-      return {
-        label: d.toLocaleString('en-IN', { month: 'short' }),
-        value: isCurrentMonth ? historical + driverState.earnings : historical,
-      };
+      return { label: d.toLocaleString('en-IN', { month: 'short' }), value: isCurrent ? hist + todayEarnings : hist };
     });
-  }, [completedTrips, driverState.earnings]);
+  }, [completedTrips, todayEarnings]);
 
-  const monthlyTrips = useMemo(() => {
+  const monthlyTripsData = useMemo(() => {
     const now = new Date();
     return Array.from({ length: 6 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-      const isCurrentMonth =
-        d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-      const count = completedTrips.filter((t) => {
-        const td = new Date(t.createdAt);
-        return td.getFullYear() === d.getFullYear() && td.getMonth() === d.getMonth();
-      }).length;
-      return {
-        label: d.toLocaleString('en-IN', { month: 'short' }),
-        value: isCurrentMonth ? count + driverState.tripsToday : count,
-      };
+      const isCurrent = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      const cnt = completedTrips.filter((t) => { const td = new Date(t.createdAt); return td.getFullYear() === d.getFullYear() && td.getMonth() === d.getMonth(); }).length;
+      return { label: d.toLocaleString('en-IN', { month: 'short' }), value: isCurrent ? cnt + driverState.tripsToday : cnt };
     });
   }, [completedTrips, driverState.tripsToday]);
 
@@ -97,69 +135,80 @@ export function DriverDashboard({ tabBar }: { tabBar?: React.ReactNode }) {
     <div className="scrollbar-thin z-10 flex h-full w-full shrink-0 flex-col gap-3 overflow-y-auto border-t border-white/[0.06] p-4 lg:max-w-md lg:border-l lg:border-t-0">
       {tabBar}
 
+      {/* Header */}
       <div>
         <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-orange-400/90">
-          Performance
+          Driver dashboard
         </p>
         <h2 className="text-base font-bold text-white">
-          {profile?.full_name?.split(' ')[0] ?? 'Driver'} &mdash; Earnings & Analytics
+          {profile?.full_name ?? 'Driver'} — Performance
         </h2>
       </div>
 
-      {/* KPIs */}
+      {/* Top KPIs */}
       <div className="grid grid-cols-2 gap-2">
-        <KpiWidget
-          label="Session earnings"
-          value={`₹${driverState.earnings}`}
-          accent="orange"
-          trend="+session"
-        />
-        <KpiWidget label="Session trips" value={driverState.tripsToday} accent="cyan" />
-        <KpiWidget label="Rating" value={driverState.rating} accent="emerald" />
-        <KpiWidget label="Total earned" value={`₹${totalEarnings}`} accent="amber" />
+        <KpiWidget label="Total earnings"    value={`₹${totalEarnings}`}      accent="orange" />
+        <KpiWidget label="Total trips"       value={totalTrips}                accent="cyan"   />
+        <KpiWidget label="Avg rating"        value={`★ ${driverState.rating}`} accent="emerald" />
+        <KpiWidget label="Cancelled"         value={cancelledTrips.length}     accent="rose"   />
       </div>
 
-      {avgEarningPerTrip > 0 && (
-        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-300">
-          Avg per trip: <span className="font-bold">₹{avgEarningPerTrip}</span>
-          <span className="ml-2 text-slate-500">·</span>
-          <span className="ml-2 text-slate-400">Total trips: {totalTrips}</span>
+      {/* Earning summary: today / week / month */}
+      <GlassCard className="p-4">
+        <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          Earnings breakdown
+        </p>
+        <div className="space-y-2">
+          {earningSummaryRow('Today (session)', todayEarnings, driverState.tripsToday)}
+          {earningSummaryRow('This week',        weekEarnings,  weekTrips)}
+          {earningSummaryRow('This month',       monthEarnings, monthTrips)}
+          {earningSummaryRow('All time',         totalEarnings, totalTrips)}
         </div>
-      )}
+        {avgEarningPerTrip > 0 && (
+          <p className="mt-3 text-center text-[10px] text-slate-600">
+            Avg per trip: <span className="font-bold text-slate-400">₹{avgEarningPerTrip}</span>
+          </p>
+        )}
+      </GlassCard>
 
-      {/* Monthly earnings chart */}
+      {/* Distance covered */}
+      <div className="flex items-center justify-between rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3">
+        <div>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Distance covered</p>
+          <p className="mt-0.5 text-xl font-bold text-cyan-400">{totalDistanceKm} km</p>
+        </div>
+        <span className="text-3xl opacity-30">🛣️</span>
+      </div>
+
+      {/* Charts */}
       <GlassCard className="p-4">
         <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
           Monthly earnings (₹)
         </p>
-        <MiniBarChart data={monthlyEarnings} color="emerald" />
+        <BarChart data={monthlyEarnings} grad="from-emerald-500 to-cyan-400" />
       </GlassCard>
 
-      {/* Monthly trips chart */}
       <GlassCard className="p-4">
         <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
           Monthly trips
         </p>
-        <MiniBarChart data={monthlyTrips} color="orange" />
+        <BarChart data={monthlyTripsData} grad="from-orange-500 to-amber-400" />
       </GlassCard>
 
       {/* Performance metrics */}
       <GlassCard className="p-4">
         <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-          Compliance & performance
+          Performance metrics
         </p>
         <div className="space-y-3">
-          {PERF_METRICS.map((m) => (
+          {PERF.map((m) => (
             <div key={m.label}>
               <div className="mb-1 flex justify-between text-[10px]">
                 <span className="text-slate-400">{m.label}</span>
                 <span className="font-bold text-white">{m.value}</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className={`h-full rounded-full bg-${m.color} transition-all`}
-                  style={{ width: `${m.bar * 100}%` }}
-                />
+                <div className={`h-full rounded-full ${m.cls} transition-all`} style={{ width: `${m.bar * 100}%` }} />
               </div>
             </div>
           ))}
@@ -169,12 +218,13 @@ export function DriverDashboard({ tabBar }: { tabBar?: React.ReactNode }) {
       {/* Trip history */}
       <GlassCard className="p-4">
         <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-          Trip history
+          Recent trip history
         </p>
         {completedTrips.length === 0 ? (
-          <p className="py-4 text-center text-xs text-slate-600">
-            Complete trips to see your history here.
-          </p>
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <span className="text-3xl opacity-20">🚗</span>
+            <p className="text-xs text-slate-600">Complete trips to see history here.</p>
+          </div>
         ) : (
           <div className="space-y-2">
             {completedTrips.slice(0, 10).map((t) => (
@@ -182,21 +232,16 @@ export function DriverDashboard({ tabBar }: { tabBar?: React.ReactNode }) {
                 key={t.id}
                 className="flex items-start justify-between rounded-xl border border-white/[0.06] bg-[#0a1020]/50 px-3 py-2.5"
               >
-                <div className="min-w-0 flex-1 text-xs text-slate-400">
-                  <p className="truncate text-slate-300">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs text-slate-300">
                     {t.pickup} → {t.dropoff}
                   </p>
-                  <p className="mt-0.5 text-[10px]">
-                    {new Date(t.createdAt).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                    })}{' '}
-                    · {t.distanceKm} km · {t.vehicleType}
+                  <p className="mt-0.5 text-[10px] text-slate-600">
+                    {new Date(t.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                    {' · '}{t.distanceKm} km · {t.vehicleType}
                   </p>
                 </div>
-                <div className="ml-3 shrink-0 text-right">
-                  <p className="text-sm font-bold text-emerald-400">₹{t.fare}</p>
-                </div>
+                <p className="ml-3 shrink-0 text-sm font-bold text-emerald-400">₹{t.fare}</p>
               </div>
             ))}
           </div>

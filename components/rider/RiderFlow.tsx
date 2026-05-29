@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useRide } from '@/context/RideContext';
 import { ChatToggleButton } from '@/components/chat/TripChat';
+import { RideStatusTimeline } from '@/components/common/RideStatusTimeline';
+import { TripSummaryCard } from '@/components/rider/TripSummaryCard';
 
 import {
   GpsStatusChip,
@@ -270,6 +272,7 @@ export function RiderSearching() {
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
+      <RideStatusTimeline />
       <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-orange-400">
         Matching driver
       </p>
@@ -288,34 +291,64 @@ export function RiderSearching() {
 
 export function RiderDriverArriving() {
   const { riderState, startTrip, cancelSearch } = useRide();
+  const driver = riderState.driver;
+  const initials = driver?.name?.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() ?? '?';
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">
-            Driver en route
-          </p>
-          <h2 className="text-base font-bold text-white">
-            {riderState.driver?.name ?? 'Driver assigned'}
-          </h2>
-          <p className="text-xs text-slate-400">
-            {riderState.driver?.vehicle ?? 'Vehicle'} · {riderState.driver?.plate ?? 'Plate pending'}
-          </p>
+      <RideStatusTimeline />
+
+      {/* Driver info card */}
+      <div className="mb-4 rounded-xl border border-cyan-500/15 bg-gradient-to-br from-[#0a1625] to-[#0a1020] p-4">
+        <div className="flex items-start gap-3">
+          {/* Avatar */}
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500/30 to-cyan-500/20 text-lg font-bold text-white ring-2 ring-orange-500/20">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-1">
+              <div>
+                <p className="text-base font-bold text-white leading-tight">
+                  {driver?.name ?? 'Driver'}
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  {driver?.vehicle ?? 'Vehicle'} · {driver?.plate ?? '—'}
+                </p>
+              </div>
+              <ChatToggleButton />
+            </div>
+            {/* Rating + ETA */}
+            <div className="mt-2 flex items-center gap-3 text-xs">
+              <span className="flex items-center gap-1 font-bold text-amber-400">
+                ★ {driver?.rating ?? 4.9}
+              </span>
+              <span className="text-slate-600">·</span>
+              <span className="text-slate-300">
+                ETA <span className="font-bold text-white">{driver?.eta ?? 4} min</span>
+              </span>
+            </div>
+          </div>
         </div>
-        <ChatToggleButton />
+
+        {/* Contact row */}
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => alert('Calling driver… (demo)')}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 py-2 text-[11px] font-semibold text-emerald-400 transition hover:bg-emerald-500/20"
+          >
+            📞 Call driver
+          </button>
+          <button
+            type="button"
+            onClick={() => alert('SOS alert sent to safety team (demo)')}
+            className="flex items-center justify-center rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] font-semibold text-rose-400 transition hover:bg-rose-500/20"
+          >
+            🆘 SOS
+          </button>
+        </div>
       </div>
-      <div className="mb-4 mt-3" />
-      <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-xl border border-white/[0.06] bg-[#0a1020]/50 p-3">
-          <p className="text-slate-500">ETA</p>
-          <p className="font-bold text-white">{riderState.driver?.eta ?? 4} min</p>
-        </div>
-        <div className="rounded-xl border border-white/[0.06] bg-[#0a1020]/50 p-3">
-          <p className="text-slate-500">Rating</p>
-          <p className="font-bold text-white">{riderState.driver?.rating ?? 4.9}</p>
-        </div>
-      </div>
+
       <div className="flex gap-2">
         <button type="button" onClick={cancelSearch} className={`${btnGhost} flex-1 text-xs`}>
           Cancel
@@ -330,25 +363,28 @@ export function RiderDriverArriving() {
 
 export function RiderInTrip() {
   const { riderState } = useRide();
+  const pct = Math.min(Math.round(riderState.progress), 100);
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
+      <RideStatusTimeline />
       <div className="mb-2 flex items-center justify-between">
         <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
           Trip active
         </p>
         <ChatToggleButton />
       </div>
-      <div className="mb-3 h-2 overflow-hidden rounded-full bg-white/10">
+
+      {/* Progress bar */}
+      <div className="mb-1 h-2 overflow-hidden rounded-full bg-white/10">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all"
-          style={{ width: `${Math.min(riderState.progress, 100)}%` }}
+          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-700"
+          style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="space-y-2 rounded-xl border border-white/[0.06] bg-[#0a1020]/50 p-3 text-xs text-slate-400">
-        <p>{riderState.pickup}</p>
-        <p>{riderState.dropoff}</p>
-      </div>
+      <p className="mb-3 text-right text-[10px] font-mono text-slate-600">{pct}%</p>
+
+      <TripSummaryCard />
     </GlassCard>
   );
 }
@@ -363,13 +399,19 @@ const PAY_METHODS: { id: PayMethod; label: string; icon: string; sub: string }[]
 ];
 
 export function RiderPayment() {
-  const { riderState, completePayment } = useRide();
-  const [method, setMethod] = useState<PayMethod>('upi');
+  const { riderState, setRiderState, completePayment } = useRide();
+  const [method, setMethodLocal] = useState<PayMethod>('upi');
   const [paying, setPaying] = useState(false);
+
+  const setMethod = (m: PayMethod) => {
+    setMethodLocal(m);
+    setRiderState((prev) => ({ ...prev, paymentMethod: m }));
+  };
 
   const handlePay = async () => {
     setPaying(true);
-    await new Promise((r) => setTimeout(r, 800));
+    setRiderState((prev) => ({ ...prev, paymentMethod: method }));
+    await new Promise((r) => setTimeout(r, 900));
     completePayment();
   };
 
@@ -377,18 +419,14 @@ export function RiderPayment() {
 
   return (
     <GlassCard className="z-10 shrink-0 p-4 lg:max-w-sm lg:border-l lg:p-5">
-      <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-orange-400">
+      <RideStatusTimeline />
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-orange-400">
         Payment
       </p>
 
-      {/* Fare total */}
-      <div className="mb-4 rounded-xl border border-orange-500/15 bg-gradient-to-br from-[#0f1629] to-[#0a1020] p-4">
-        <p className="text-xs text-slate-500">Trip total</p>
-        <p className="text-2xl font-bold text-orange-400">₹{fare}</p>
-        <p className="mt-1 text-[10px] text-slate-600">
-          {riderState.pickup} → {riderState.dropoff}
-        </p>
-      </div>
+      {/* Trip summary */}
+      <TripSummaryCard />
+      <div className="my-3" />
 
       {/* Payment methods */}
       <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
@@ -418,12 +456,7 @@ export function RiderPayment() {
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={handlePay}
-        disabled={paying}
-        className={btnPrimary}
-      >
+      <button type="button" onClick={handlePay} disabled={paying} className={btnPrimary}>
         {paying
           ? 'Processing…'
           : `Pay ₹${fare} via ${PAY_METHODS.find((m) => m.id === method)?.label} →`}
@@ -443,6 +476,10 @@ export function RiderRating() {
       <p className="mb-3 text-[11px] text-slate-500">
         How was your ride with {riderState.driver?.name ?? 'your driver'}?
       </p>
+
+      {/* Trip summary with payment method */}
+      <TripSummaryCard paymentMethod={riderState.paymentMethod} />
+      <div className="my-3" />
 
       {/* Star selector */}
       <div className="mb-1 flex gap-2">
