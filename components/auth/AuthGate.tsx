@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { btnPrimary, btnGhost, inputField, labelCaps } from '@/components/ui/styles';
 import type { DriverApplicationInput } from '@/lib/localAuth';
+import { FileUploadField } from '@/components/auth/FileUploadField';
 
 // ── Shared layout ─────────────────────────────────────────────────────────────
 function AuthShell({ children }: { children: React.ReactNode }) {
@@ -211,11 +212,11 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
   const [vehicleType, setVehicleType] = useState('Auto');
   const [vehicleNumber, setVehicleNumber] = useState('');
 
-  // Step 3 — Documents (URLs for demo — no actual upload infrastructure)
-  const [rcUrl, setRcUrl] = useState('');
-  const [licenseUrl, setLicenseUrl] = useState('');
-  const [aadhaarUrl, setAadhaarUrl] = useState('');
-  const [photoUrl, setPhotoUrl] = useState('');
+  // Step 3 — Documents (files stored in local state for demo)
+  const [rcFile,      setRcFile]      = useState<File | null>(null);
+  const [licenseFile, setLicenseFile] = useState<File | null>(null);
+  const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
+  const [photoFile,   setPhotoFile]   = useState<File | null>(null);
 
   // Step 4 — Bank
   const [accountHolder, setAccountHolder] = useState('');
@@ -249,7 +250,7 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
       const appData: DriverApplicationInput = {
         full_name: fullName, mobile, email, address,
         vehicle_type: vehicleType, vehicle_number: vehicleNumber,
-        rc_url: rcUrl, license_url: licenseUrl, aadhaar_url: aadhaarUrl, photo_url: photoUrl,
+        rc_url: rcFile?.name ?? '', license_url: licenseFile?.name ?? '', aadhaar_url: aadhaarFile?.name ?? '', photo_url: photoFile?.name ?? '',
         account_holder: accountHolder, account_number: accountNumber, ifsc_code: ifscCode,
       };
       await submitDriverApplication(userId, appData);
@@ -364,25 +365,52 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
         )}
 
         {step === 3 && (
-          <form onSubmit={next} className="space-y-3">
-            <p className="mb-1 text-xs font-semibold text-slate-300">Documents</p>
-            <p className="mb-3 text-[10px] text-slate-500">For demo: paste a URL or leave blank. File upload available in production.</p>
-            <Field label="RC Book URL">
-              <input type="url" placeholder="https://..." value={rcUrl}
-                onChange={(e) => setRcUrl(e.target.value)} className={inputField} />
-            </Field>
-            <Field label="Driver License URL">
-              <input type="url" placeholder="https://..." value={licenseUrl}
-                onChange={(e) => setLicenseUrl(e.target.value)} className={inputField} />
-            </Field>
-            <Field label="Aadhaar URL">
-              <input type="url" placeholder="https://..." value={aadhaarUrl}
-                onChange={(e) => setAadhaarUrl(e.target.value)} className={inputField} />
-            </Field>
-            <Field label="Profile Photo URL">
-              <input type="url" placeholder="https://..." value={photoUrl}
-                onChange={(e) => setPhotoUrl(e.target.value)} className={inputField} />
-            </Field>
+          <form onSubmit={next} className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-slate-300">Upload Documents</p>
+              <p className="mt-0.5 text-[10px] text-slate-600">
+                JPG · PNG · PDF &nbsp;·&nbsp; Max 5 MB each &nbsp;·&nbsp; Stored locally for demo
+              </p>
+            </div>
+
+            <FileUploadField
+              label="Profile Photo"
+              hint="JPG or PNG · Your face should be clearly visible"
+              file={photoFile}
+              onSelect={setPhotoFile}
+              onRemove={() => setPhotoFile(null)}
+              showPreview
+              required
+            />
+
+            <FileUploadField
+              label="RC Book"
+              hint="Registration certificate · JPG, PNG or PDF"
+              file={rcFile}
+              onSelect={setRcFile}
+              onRemove={() => setRcFile(null)}
+              required
+            />
+
+            <FileUploadField
+              label="Driver License"
+              hint="Front side · JPG, PNG or PDF"
+              file={licenseFile}
+              onSelect={setLicenseFile}
+              onRemove={() => setLicenseFile(null)}
+              required
+            />
+
+            <FileUploadField
+              label="Aadhaar Card"
+              hint="Front side · JPG, PNG or PDF"
+              file={aadhaarFile}
+              onSelect={setAadhaarFile}
+              onRemove={() => setAadhaarFile(null)}
+              required
+            />
+
+            {error && <p className="text-[11px] text-rose-400">{error}</p>}
             <div className="flex gap-2">
               <button type="button" onClick={() => setStep(2)} className={`${btnGhost} flex-1`}>← Back</button>
               <button type="submit" className={`${btnPrimary} flex-[2]`}>Next: Bank →</button>
