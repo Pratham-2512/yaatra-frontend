@@ -212,11 +212,15 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
   const [vehicleType, setVehicleType] = useState('Auto');
   const [vehicleNumber, setVehicleNumber] = useState('');
 
-  // Step 3 — Documents (files stored in local state for demo)
+  // Step 3 — Documents (files in state; public URLs written to Supabase Storage)
   const [rcFile,      setRcFile]      = useState<File | null>(null);
+  const [rcUrl,       setRcUrl]       = useState('');
   const [licenseFile, setLicenseFile] = useState<File | null>(null);
+  const [licenseUrl,  setLicenseUrl]  = useState('');
   const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
+  const [aadhaarUrl,  setAadhaarUrl]  = useState('');
   const [photoFile,   setPhotoFile]   = useState<File | null>(null);
+  const [photoUrl,    setPhotoUrl]    = useState('');
 
   // Step 4 — Bank
   const [accountHolder, setAccountHolder] = useState('');
@@ -250,7 +254,7 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
       const appData: DriverApplicationInput = {
         full_name: fullName, mobile, email, address,
         vehicle_type: vehicleType, vehicle_number: vehicleNumber,
-        rc_url: rcFile?.name ?? '', license_url: licenseFile?.name ?? '', aadhaar_url: aadhaarFile?.name ?? '', photo_url: photoFile?.name ?? '',
+        rc_url: rcUrl || rcFile?.name || '', license_url: licenseUrl || licenseFile?.name || '', aadhaar_url: aadhaarUrl || aadhaarFile?.name || '', photo_url: photoUrl || photoFile?.name || '',
         account_holder: accountHolder, account_number: accountNumber, ifsc_code: ifscCode,
       };
       await submitDriverApplication(userId, appData);
@@ -377,37 +381,45 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
               label="Profile Photo"
               hint="JPG or PNG · Your face should be clearly visible"
               file={photoFile}
-              onSelect={setPhotoFile}
-              onRemove={() => setPhotoFile(null)}
+              onSelect={(f, url) => { setPhotoFile(f); if (url) setPhotoUrl(url); }}
+              onRemove={() => { setPhotoFile(null); setPhotoUrl(''); }}
               showPreview
               required
+              fieldName="photo"
+              mobile={mobile}
             />
 
             <FileUploadField
               label="RC Book"
               hint="Registration certificate · JPG, PNG or PDF"
               file={rcFile}
-              onSelect={setRcFile}
-              onRemove={() => setRcFile(null)}
+              onSelect={(f, url) => { setRcFile(f); if (url) setRcUrl(url); }}
+              onRemove={() => { setRcFile(null); setRcUrl(''); }}
               required
+              fieldName="rc_book"
+              mobile={mobile}
             />
 
             <FileUploadField
               label="Driver License"
               hint="Front side · JPG, PNG or PDF"
               file={licenseFile}
-              onSelect={setLicenseFile}
-              onRemove={() => setLicenseFile(null)}
+              onSelect={(f, url) => { setLicenseFile(f); if (url) setLicenseUrl(url); }}
+              onRemove={() => { setLicenseFile(null); setLicenseUrl(''); }}
               required
+              fieldName="license"
+              mobile={mobile}
             />
 
             <FileUploadField
               label="Aadhaar Card"
               hint="Front side · JPG, PNG or PDF"
               file={aadhaarFile}
-              onSelect={setAadhaarFile}
-              onRemove={() => setAadhaarFile(null)}
+              onSelect={(f, url) => { setAadhaarFile(f); if (url) setAadhaarUrl(url); }}
+              onRemove={() => { setAadhaarFile(null); setAadhaarUrl(''); }}
               required
+              fieldName="aadhaar"
+              mobile={mobile}
             />
 
             {error && <p className="text-[11px] text-rose-400">{error}</p>}

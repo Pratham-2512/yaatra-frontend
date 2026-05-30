@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { uploadDriverDocument } from '@/lib/supabaseStorage';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -52,11 +53,15 @@ export interface FileUploadFieldProps {
   label: string;
   hint?: string;
   file: File | null;
-  onSelect: (file: File) => void;
+  onSelect: (file: File, publicUrl?: string) => void;
   onRemove: () => void;
   showPreview?: boolean;
   maxSizeMb?: number;
   required?: boolean;
+  /** Used for Supabase Storage path — e.g. "rc_book", "photo" */
+  fieldName?: string;
+  /** Mobile number used as folder name in Supabase Storage */
+  mobile?: string;
 }
 
 export function FileUploadField({
@@ -68,6 +73,8 @@ export function FileUploadField({
   showPreview = false,
   maxSizeMb = 5,
   required = false,
+  fieldName,
+  mobile,
 }: FileUploadFieldProps) {
   const inputRef                  = useRef<HTMLInputElement>(null);
   const [dragging, setDragging]   = useState(false);
@@ -100,15 +107,22 @@ export function FileUploadField({
   };
 
   const handleFile = useCallback(
-    (f: File) => {
+    async (f: File) => {
       const err = validate(f);
       if (err) { setError(err); return; }
       setError('');
-      onSelect(f);
+      onSelect(f);       // immediately reflect file in UI
       setUploading(true);
+
+      // Upload to Supabase Storage in background (non-blocking)
+      if (fieldName && mobile) {
+        const { url, error: uploadErr } = await uploadDriverDocument(f, fieldName, mobile);
+        if (uploadErr) setError(`Upload warning: ${uploadErr}`);
+        if (url) onSelect(f, url); // pass back the public URL
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [onSelect, maxSizeMb]
+    [onSelect, maxSizeMb, fieldName, mobile]
   );
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
