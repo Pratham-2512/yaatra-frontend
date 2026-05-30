@@ -87,31 +87,57 @@ function resolve(input: string): GeoResult | null {
     };
   }
 
-  // City-level fallbacks
+  // City-level fallbacks for known cities in the local table
   if (lower.includes('gurgaon') || lower.includes('gurugram'))
-    return { lat: '28.4595', lon: '77.0689', display_name: `${input.trim()}, Gurgaon` };
-  if (lower.includes('delhi'))
-    return { lat: '28.6139', lon: '77.2090', display_name: `${input.trim()}, Delhi` };
+    return { lat: '28.4595', lon: '77.0689', display_name: input.trim() };
+  if (lower.includes('delhi') && !lower.includes('new delhi'))
+    return { lat: '28.6139', lon: '77.2090', display_name: input.trim() };
+  if (lower.includes('new delhi'))
+    return { lat: '28.6304', lon: '77.2177', display_name: input.trim() };
   if (lower.includes('noida'))
-    return { lat: '28.5355', lon: '77.3910', display_name: `${input.trim()}, Noida` };
+    return { lat: '28.5355', lon: '77.3910', display_name: input.trim() };
 
-  // Last-resort jitter within NCR so the map at least shows something
-  const seed = lower.length;
-  return {
-    lat: String((28.46 + (seed % 8) * 0.002).toFixed(5)),
-    lon: String((77.08 + (seed % 10) * 0.003).toFixed(5)),
-    display_name: `${input.trim()}, NCR`,
-  };
+  // No local match found — signal caller to use Nominatim
+  return null;
 }
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get('q');
   if (!q?.trim()) return NextResponse.json([], { status: 200 });
 
-  const result = resolve(q);
-  if (!result) return NextResponse.json([], { status: 200 });
+  // 1. Fast local zone lookup (no network, no rate limits)
+  const local = resolve(q);
+  if (local) {
+    return NextResponse.json([local], {
+      headers: { 'Cache-Control': 'public, max-age=3600' },
+    });
+  }
 
-  return NextResponse.json([result], {
-    headers: { 'Cache-Control': 'public, max-age=3600' },
-  });
+  // 2. Unknown location — call real Nominatim so any city in the world works
+  try {
+    const nominatimUrl =
+      `https://nominatim.openstreetmap.org/search` +
+      `?q=${encodeURIComponent(q)}&format=json&limit=3&addressdetails=0`;
+
+    const res = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'YAATRA/1.0 (mobility-platform; contact@yaatra.app)',
+        'Accept-Language': 'en',
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.ok) {
+      const places = await res.json();
+      if (Array.isArray(places) && places.length > 0) {
+        return NextResponse.json(places, {
+          headers: { 'Cache-Control': 'public, max-age=3600' },
+        });
+      }
+    }
+  } catch {
+    // Nominatim unreachable — return empty so caller shows "Location not found"
+  }
+
+  return NextResponse.json([], { status: 200 });
 }
