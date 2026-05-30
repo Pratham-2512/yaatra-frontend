@@ -131,9 +131,21 @@ const RIDER_AUTO_REPLIES = [
   'Perfect, thank you!',
 ];
 
+// Simulated incoming rides for drivers (demo mode — no real rider needed)
+const SIM_RIDES: IncomingRide[] = [
+  { id: 'SIM-001', pickup: 'Cyber Hub, DLF Cyber City', dropoff: 'MG Road Metro, Gurgaon',   distance: 3.2, fare: '₹180', passenger: 'Priya S.',  rating: 4.8, vehicleType: 'sedan' },
+  { id: 'SIM-002', pickup: 'Sector 22, Gurgaon',        dropoff: 'Huda City Centre Metro',    distance: 5.8, fare: '₹235', passenger: 'Rahul M.',  rating: 4.7, vehicleType: 'auto'  },
+  { id: 'SIM-003', pickup: 'Golf Course Road, Gurgaon', dropoff: 'IFFCO Chowk, Gurgaon',     distance: 4.1, fare: '₹200', passenger: 'Amit K.',   rating: 4.9, vehicleType: 'sedan' },
+  { id: 'SIM-004', pickup: 'DLF Phase 1, Gurgaon',      dropoff: 'Sector 29, Gurgaon',       distance: 2.9, fare: '₹165', passenger: 'Sneha R.',  rating: 4.6, vehicleType: 'mini'  },
+  { id: 'SIM-005', pickup: 'Sohna Road, Gurgaon',       dropoff: 'Ambience Mall, Gurgaon',   distance: 6.3, fare: '₹260', passenger: 'Vikram P.', rating: 4.9, vehicleType: 'suv'   },
+];
+
+let simRideIndex = 0;
+
 export function RideProvider({ children }: { children: React.ReactNode }) {
-  const autoAssignRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoAssignRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reachedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const simRideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { push: toast } = useToast();
   const { profile } = useAuth();
   const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -331,7 +343,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
 
   const bookRide = useCallback(async () => {
     const vt = riderState.vehicleType as VehicleType;
-    const fareStr = `â‚¹${riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].baseFare}`;
+    const fareStr = `₹${riderState.fare?.totalFare ?? VEHICLE_PRICING[vt].baseFare}`;
     let rideId = `RIDE-${Date.now().toString(36).slice(-6).toUpperCase()}`;
 
     try {
@@ -377,7 +389,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       }));
       toast('info', 'Ride requested', 'Fleet partners notified in your zone.');
     } else {
-      toast('info', 'Finding driver', 'Matching nearest partner across NCRâ€¦');
+      toast('info', 'Finding driver', 'Matching nearest partner across NCR…');
       setTimeout(() => {
         setDriverState((prev) => ({
           ...prev,
@@ -427,7 +439,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
             driver,
           }));
           setTripPhase('arriving');
-          toast('success', 'Driver assigned', `${driver.name} Â· fleet auto-match`);
+          toast('success', 'Driver assigned', `${driver.name} · fleet auto-match`);
           if (route.length) {
             setDriverMapPosition(interpolateRoute(route, 0));
             startDriverMovement(0, 18);
@@ -671,31 +683,49 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
   const toggleOnline = useCallback(() => {
     const goingOnline = !driverState.online;
     setDriverState((prev) => ({ ...prev, online: goingOnline }));
-    toast(
-      goingOnline ? 'success' : 'info',
-      goingOnline ? 'You are online' : 'You are offline',
-      goingOnline ? 'Receiving demand from NCR hotspots.' : 'You will not get new requests.'
-    );
-    if (goingOnline && tripPhase === 'searching' && riderState.rideId) {
+
+    if (!goingOnline) {
+      // Clear pending sim ride when going offline
+      if (simRideTimerRef.current) clearTimeout(simRideTimerRef.current);
+      toast('info', 'You are offline', 'You will not receive new requests.');
+      return;
+    }
+
+    toast('success', 'You are online', 'Scanning NCR hotspots for ride requests…');
+
+    // If there is already a live ride being searched (rider in same session), surface it
+    if (tripPhase === 'searching' && riderState.rideId) {
       const incoming: IncomingRide = {
         id: riderState.rideId,
         pickup: riderState.pickup,
         dropoff: riderState.dropoff,
         distance: Number(riderState.distance) || 5,
-        fare: `â‚¹${riderState.fare?.totalFare ?? 280}`,
+        fare: `₹${riderState.fare?.totalFare ?? 280}`,
         passenger: 'Rider',
         rating: 4.9,
         vehicleType: riderState.vehicleType,
       };
-      setDriverState((prev) => ({
-        ...prev,
-        incomingRides: [incoming],
-      }));
+      setDriverState((prev) => ({ ...prev, incomingRides: [incoming] }));
+      return;
     }
+
+    // No live rider — simulate an incoming request after a realistic delay
+    const delay = 7000 + Math.random() * 5000; // 7–12 s
+    simRideTimerRef.current = setTimeout(() => {
+      const ride = { ...SIM_RIDES[simRideIndex % SIM_RIDES.length] };
+      ride.id = `SIM-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+      simRideIndex += 1;
+      setDriverState((prev) => {
+        if (!prev.online || prev.incomingRides.length || prev.acceptedRide) return prev;
+        return { ...prev, incomingRides: [ride] };
+      });
+      toast('info', 'New ride request! 🚀', `${ride.pickup} → ${ride.dropoff}`);
+    }, delay);
   }, [driverState.online, tripPhase, riderState, toast]);
 
   const completeDriverTrip = useCallback(() => {
     clearAnimations();
+    if (simRideTimerRef.current) clearTimeout(simRideTimerRef.current);
     const fare = driverState.acceptedRide?.fare ?? '₹285';
     const amount = parseInt(fare.replace(/\D/g, ''), 10) || 285;
     const userId = localGetSession();

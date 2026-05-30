@@ -105,8 +105,23 @@ export function DriverHome({ tabBar }: { tabBar?: React.ReactNode }) {
       )}
 
       {driverState.online && !driverState.incomingRides.length && (
-        <GlassCard className="p-4 text-center text-xs text-slate-500">
-          Listening across Gurgaon hotspots for rider requests…
+        <GlassCard className="p-4">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative h-3 w-3 rounded-full bg-emerald-500" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold text-slate-300">Scanning NCR hotspots…</p>
+              <p className="mt-0.5 text-[10px] text-slate-600">
+                A ride request will arrive shortly. Stay online to accept.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 h-px bg-white/[0.05]" />
+          <p className="mt-2.5 text-center text-[9px] text-slate-700">
+            Tip: ride requests arrive within 7–12 seconds of going online
+          </p>
         </GlassCard>
       )}
     </div>
