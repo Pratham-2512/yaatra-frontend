@@ -1,6 +1,7 @@
 'use client';
 
 import { useRide } from '@/context/RideContext';
+import { useAuth } from '@/context/AuthContext';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { KpiWidget } from '@/components/ui/KpiWidget';
 import { btnPrimary } from '@/components/ui/styles';
@@ -9,6 +10,7 @@ import { ChatToggleButton } from '@/components/chat/TripChat';
 
 export function DriverHome({ tabBar }: { tabBar?: React.ReactNode }) {
   const { driverState, toggleOnline, acceptRide, rejectRide } = useRide();
+  const { profile } = useAuth();
 
   return (
     <div className="scrollbar-thin flex w-full shrink-0 flex-col gap-3 overflow-y-auto border-t border-white/[0.06] p-3 md:p-4 lg:w-80 lg:border-l lg:border-t-0 lg:p-4">
@@ -18,7 +20,7 @@ export function DriverHome({ tabBar }: { tabBar?: React.ReactNode }) {
           <p className="text-[9px] font-bold uppercase tracking-widest text-cyan-500/90">
             Fleet partner
           </p>
-          <h2 className="text-base font-bold text-white">Raj Kumar</h2>
+          <h2 className="text-base font-bold text-white">{profile?.full_name ?? 'Driver'}</h2>
         </div>
         <button
           type="button"

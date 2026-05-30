@@ -467,6 +467,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       };
       const driver: DriverInfo = {
         ...DEFAULT_DRIVER,
+        name: profile?.full_name ?? DEFAULT_DRIVER.name,
         vehicle: VEHICLE_MAP[ride.vehicleType ?? ''] ?? DEFAULT_DRIVER.vehicle,
         eta: 4,
       };
