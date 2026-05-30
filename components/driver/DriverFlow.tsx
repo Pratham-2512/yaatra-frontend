@@ -16,7 +16,7 @@ export function DriverHome({ tabBar }: { tabBar?: React.ReactNode }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-[9px] font-bold uppercase tracking-widest text-cyan-500/90">
-            Fleet partner · NCR
+            Fleet partner
           </p>
           <h2 className="text-base font-bold text-white">Raj Kumar</h2>
         </div>
@@ -112,7 +112,7 @@ export function DriverHome({ tabBar }: { tabBar?: React.ReactNode }) {
               <span className="relative h-3 w-3 rounded-full bg-emerald-500" />
             </span>
             <div>
-              <p className="text-xs font-semibold text-slate-300">Scanning NCR hotspots…</p>
+              <p className="text-xs font-semibold text-slate-300">Scanning for ride requests…</p>
               <p className="mt-0.5 text-[10px] text-slate-600">
                 A ride request will arrive shortly. Stay online to accept.
               </p>

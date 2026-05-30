@@ -96,7 +96,7 @@ interface RideContextValue {
   resetToHome: () => void;
 
   toggleOnline: () => void;
-  acceptRide: (rideId: string) => Promise<void>;
+  acceptRide: (rideId: string) => void;
   rejectRide: (rideId: string) => void;
   driverStartTrip: () => void;
   completeDriverTrip: () => void;
@@ -255,7 +255,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
 
   const runEstimate = useCallback(async () => {
     if (!riderState.pickup.trim() || !riderState.dropoff.trim()) {
-      toast('warning', 'Add locations', 'Enter pickup and dropoff in NCR.');
+      toast('warning', 'Add locations', 'Enter pickup and dropoff to get a fare estimate.');
       return;
     }
     setIsEstimating(true);
@@ -389,7 +389,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       }));
       toast('info', 'Ride requested', 'Fleet partners notified in your zone.');
     } else {
-      toast('info', 'Finding driver', 'Matching nearest partner across NCR…');
+      toast('info', 'Finding driver', 'Matching nearest available partner…');
       setTimeout(() => {
         setDriverState((prev) => ({
           ...prev,
@@ -452,43 +452,31 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
   }, [riderState, driverState.online, route, startDriverMovement, toast]);
 
   const acceptRide = useCallback(
-    async (rideId: string) => {
+    (rideId: string) => {
       if (autoAssignRef.current) clearTimeout(autoAssignRef.current);
-      try {
-        await tripApi.assignTrip(rideId, DRIVER_ID, DEFAULT_DRIVER.name);
-      } catch {
-        /* simulated accept */
-      }
 
+      // Find the ride BEFORE any async work so we never hit a stale-closure miss
       const ride = driverState.incomingRides.find((r) => r.id === rideId);
       if (!ride) return;
 
+      // Fire-and-forget the backend call — SIM ride IDs don't exist there, don't block UI
+      tripApi.assignTrip(rideId, DRIVER_ID, DEFAULT_DRIVER.name).catch(() => {});
+
+      const VEHICLE_MAP: Record<string, string> = {
+        bike: 'Honda Activa', auto: 'Bajaj RE', mini: 'Maruti Swift', suv: 'Toyota Innova', premium: 'Mercedes E-Class',
+      };
       const driver: DriverInfo = {
         ...DEFAULT_DRIVER,
-        vehicle:
-          ride.vehicleType === 'bike'
-            ? 'Honda Activa'
-            : ride.vehicleType === 'auto'
-              ? 'Bajaj RE'
-              : DEFAULT_DRIVER.vehicle,
+        vehicle: VEHICLE_MAP[ride.vehicleType ?? ''] ?? DEFAULT_DRIVER.vehicle,
         eta: 4,
       };
 
-      setDriverState((prev) => ({
-        ...prev,
-        acceptedRide: ride,
-        incomingRides: [],
-        screen: 'pickup',
-      }));
-
-      setRiderState((prev) => ({
-        ...prev,
-        screen: 'driverArriving',
-        driver,
-        rideId,
-      }));
+      // Update all state synchronously
+      setDriverState((prev) => ({ ...prev, acceptedRide: ride, incomingRides: [], screen: 'pickup' }));
+      setRiderState((prev) => ({ ...prev, screen: 'driverArriving', driver, rideId }));
       setTripPhase('arriving');
-      toast('success', 'Driver assigned', `${driver.name} is en route · ${driver.eta} min`);
+      toast('success', 'Ride accepted! 🚗', `Navigate to ${ride.pickup}`);
+
       const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       setChatMessages([{
         id: 'seed-0',
@@ -499,16 +487,25 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
         read: false,
       }]);
 
-      if (route.length) {
+      if (route.length >= 2) {
+        // Real route available — animate driver movement
         setDriverMapPosition(interpolateRoute(route, 0));
         startDriverMovement(0, 18, () => {
           if (reachedTimerRef.current) clearTimeout(reachedTimerRef.current);
           reachedTimerRef.current = setTimeout(() => {
             setTripPhase((prev) => (prev === 'arriving' ? 'reached' : prev));
             syncRiderScreen('reached');
-            toast('info', 'Driver arrived! 📍', 'Your driver is waiting at the pickup point.');
+            toast('info', 'Arrived at pickup 📍', 'Waiting for passenger to board.');
           }, 800);
         });
+      } else {
+        // SIM ride — no route; trigger reached after a fixed delay
+        if (reachedTimerRef.current) clearTimeout(reachedTimerRef.current);
+        reachedTimerRef.current = setTimeout(() => {
+          setTripPhase((prev) => (prev === 'arriving' ? 'reached' : prev));
+          syncRiderScreen('reached');
+          toast('info', 'Arrived at pickup 📍', 'Waiting for passenger to board.');
+        }, 6000);
       }
     },
     [driverState.incomingRides, route, startDriverMovement, syncRiderScreen, toast]
@@ -691,7 +688,7 @@ export function RideProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    toast('success', 'You are online', 'Scanning NCR hotspots for ride requests…');
+    toast('success', 'You are online', 'Scanning nearby hotspots for ride requests…');
 
     // If there is already a live ride being searched (rider in same session), surface it
     if (tripPhase === 'searching' && riderState.rideId) {

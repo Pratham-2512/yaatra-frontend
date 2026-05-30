@@ -324,7 +324,7 @@ function DriverOnboardingView({ onBack }: { onBack: () => void }) {
               <p className="mt-1 text-[10px] text-slate-500">Sign-in uses your <span className="text-slate-400">mobile number</span>. Email is for contact only.</p>
             </Field>
             <Field label="Address">
-              <input type="text" placeholder="Sector 22, Gurgaon" value={address}
+              <input type="text" placeholder="Your city / area" value={address}
                 onChange={(e) => setAddress(e.target.value)} className={inputField} />
             </Field>
             {error && <p className="text-[11px] text-rose-400">{error}</p>}

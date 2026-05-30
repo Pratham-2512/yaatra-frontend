@@ -70,7 +70,7 @@ export function RiderHome({ tabBar }: { tabBar?: React.ReactNode }) {
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
           <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-orange-400/90">
-            NCR · Live pricing
+            Live pricing
           </p>
           <h2 className="text-base font-bold text-white">Plan your trip</h2>
         </div>
@@ -88,7 +88,7 @@ export function RiderHome({ tabBar }: { tabBar?: React.ReactNode }) {
           <label className={labelCaps}>Pickup</label>
           <input
             type="text"
-            placeholder="Sector 22, Gurgaon"
+            placeholder="Enter pickup location"
             value={riderState.pickup}
             onChange={(e) => setRiderState((p) => ({ ...p, pickup: e.target.value }))}
             className={inputField}
@@ -100,7 +100,7 @@ export function RiderHome({ tabBar }: { tabBar?: React.ReactNode }) {
           <label className={labelCaps}>Dropoff</label>
           <input
             type="text"
-            placeholder="Cyber Hub, Gurgaon"
+            placeholder="Enter dropoff location"
             value={riderState.dropoff}
             onChange={(e) => setRiderState((p) => ({ ...p, dropoff: e.target.value }))}
             className={inputField}
@@ -179,7 +179,7 @@ export function RiderHome({ tabBar }: { tabBar?: React.ReactNode }) {
                 ? 'Enter your pickup location'
                 : 'Enter your dropoff location'}
           </p>
-          <p className="mt-1 text-[10px] text-slate-600">Fares are calculated after route is known</p>
+          <p className="mt-1 text-[10px] text-slate-600">Enter both locations to calculate fare</p>
         </div>
       )}
     </GlassCard>

@@ -202,7 +202,7 @@ export function CommandCenter({
 
       {adminState.anomalies.length === 0 && adminState.predictions.length === 0 && (
         <GlassCard className="p-4 text-center text-[11px] text-slate-500">
-          Monitoring 6 NCR corridors · fleet GPS synced · all systems nominal
+          Monitoring fleet corridors · GPS synced · all systems nominal
         </GlassCard>
       )}
     </div>

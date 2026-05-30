@@ -102,6 +102,13 @@ function YaatraShell() {
     if (tripPhase !== 'idle' && riderTab === 'history') setRiderTab('book');
   }, [tripPhase, riderTab]);
 
+  // When driver has an incoming ride or active trip, force back to Drive tab
+  useEffect(() => {
+    if (driverState.incomingRides.length > 0 || driverState.acceptedRide || driverState.screen !== 'home') {
+      setDriverTab('drive');
+    }
+  }, [driverState.incomingRides, driverState.acceptedRide, driverState.screen]);
+
   // Allowed nav items based on role
   const allowedNavIds: string[] =
     profile?.role === 'rider'
